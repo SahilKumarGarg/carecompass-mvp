@@ -1,0 +1,78 @@
+{
+  "demo_data": true,
+  "note": "Phrases the app must never produce. Used by checks.final_check to block diagnosis and treatment language.",
+  "banned_phrases": [
+    {
+      "id": "BP001",
+      "category": "diagnosis",
+      "phrases": [
+        "you have",
+        "you've got",
+        "you are suffering from",
+        "this is",
+        "this sounds like",
+        "this is likely",
+        "this is probably",
+        "diagnosed with",
+        "diagnosis is",
+        "the diagnosis",
+        "your condition is",
+        "you are diabetic",
+        "you are hypertensive",
+        "signs of cancer",
+        "symptoms of cancer",
+        "this could be cancer",
+        "you may have diabetes",
+        "you have a heart condition",
+        "you have an infection",
+        "you have appendicitis",
+        "you have pneumonia",
+        "you have a stroke"
+      ]
+    },
+    {
+      "id": "BP002",
+      "category": "treatment_advice",
+      "phrases": [
+        "take ibuprofen",
+        "take paracetamol",
+        "take aspirin",
+        "take antibiotics",
+        "you should take",
+        "i recommend taking",
+        "prescribed medication",
+        "prescribe you",
+        "you need antibiotics",
+        "take this medicine",
+        "take this medication",
+        "dose of",
+        "dosage of",
+        "mg of",
+        "apply cream",
+        "apply ointment",
+        "use this cream",
+        "take this tablet",
+        "you should use this drug"
+      ]
+    },
+    {
+      "id": "BP003",
+      "category": "condition_naming",
+      "phrases": [
+        "appendicitis",
+        "myocardial infarction",
+        "heart attack",
+        "deep vein thrombosis",
+        "pulmonary embolism",
+        "meningitis",
+        "sepsis",
+        "pneumonia",
+        "type 2 diabetes",
+        "hypertension",
+        "hypoglycaemia",
+        "anaphylaxis",
+        "ectopic pregnancy"
+      ]
+    }
+  ]
+}
