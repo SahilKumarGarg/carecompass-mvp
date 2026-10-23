@@ -11,10 +11,15 @@
         "chest pain",
         "chest tightness",
         "crushing chest",
+        "crushing him",
+        "crushing her",
         "pressure in my chest",
         "chest feels heavy",
         "pain in my chest",
-        "chest hurts"
+        "chest hurts",
+        "clutching his chest",
+        "clutching her chest",
+        "clutching my chest"
       ]
     },
     {
@@ -40,8 +45,10 @@
       "description": "Signs consistent with stroke (FAST criteria and related)",
       "phrases": [
         "face drooping",
+        "face is drooping",
         "arm weakness",
         "speech slurred",
+        "speech is slurred",
         "slurred speech",
         "can't speak",
         "sudden confusion",
@@ -105,10 +112,12 @@
         "allergic reaction",
         "anaphylaxis",
         "throat swelling",
+        "throat is swelling",
         "tongue swelling",
         "lips swelling",
         "epipen",
         "can't swallow",
+        "trouble swallowing",
         "face swelling fast"
       ]
     },
@@ -119,12 +128,14 @@
       "description": "High fever with altered mental state — possible serious infection",
       "phrases": [
         "very high temperature and confused",
+        "very high temperature",
         "fever and confused",
         "burning up and not making sense",
         "high fever and confused",
         "temperature and delirious",
         "fever and can't think straight",
-        "temperature over 39 and confused"
+        "temperature over 39 and confused",
+        "not making much sense"
       ]
     },
     {
@@ -134,6 +145,8 @@
       "description": "Expressions of self-harm or suicidal ideation",
       "phrases": [
         "want to hurt myself",
+        "hurting myself",
+        "thoughts of hurting myself",
         "thinking about suicide",
         "suicidal thoughts",
         "don't want to be here",
@@ -151,7 +164,10 @@
       "description": "Obstetric emergency signs",
       "phrases": [
         "pregnant and bleeding",
+        "pregnant and ive started bleeding",
+        "weeks pregnant and",
         "heavy bleeding in pregnancy",
+        "bleeding quite heavily",
         "pregnant and severe pain",
         "waters broken early",
         "baby not moving",
