@@ -1,0 +1,43 @@
+{
+  "demo_data": true,
+  "note": "Verbatim messages shown to users. Not medical advice. {emergency_number} is replaced at runtime from the EMERGENCY_NUMBER environment variable.",
+  "messages": {
+    "emergency": {
+      "id": "MSG_EMERGENCY",
+      "tier": "emergency",
+      "heading": "This sounds like an emergency.",
+      "body": "Based on what you have described, you need emergency help right now. Please call {emergency_number} immediately or ask someone nearby to call for you. Do not drive yourself. Stay on the line with the operator — they will tell you what to do while help is on the way.",
+      "additional_note": "If you cannot call, text 999 (UK) or ask anyone nearby to help you.",
+      "do_not_wait_reason": "Delaying emergency care can be life-threatening."
+    },
+    "urgent": {
+      "id": "MSG_URGENT",
+      "tier": "urgent",
+      "heading": "You should be seen today.",
+      "body": "What you have described needs attention today. Please contact an urgent care centre, your GP surgery for a same-day appointment, or call {emergency_number} if things get worse quickly. Do not wait more than a few hours.",
+      "escalation_prompt": "If you feel significantly worse, or develop any of the following — difficulty breathing, chest pain, loss of consciousness — call {emergency_number} straight away."
+    },
+    "needs_human_review": {
+      "id": "MSG_REVIEW",
+      "tier": null,
+      "heading": "We could not confirm a match.",
+      "body": "We were not able to find a service we are confident is right for your situation after checking twice. Please call your GP surgery or dial {emergency_number} if you are worried. A person can help you better here."
+    },
+    "handoff_intro": {
+      "id": "MSG_HANDOFF_INTRO",
+      "tier": null,
+      "heading": "Share a summary?",
+      "body": "Would you like a short summary of this conversation to share with a healthcare professional? It will include what you described and the service we suggested — nothing more."
+    },
+    "handoff_declined": {
+      "id": "MSG_HANDOFF_DECLINED",
+      "tier": null,
+      "body": "No summary created. You can always come back if you need help again."
+    },
+    "disclaimer": {
+      "id": "MSG_DISCLAIMER",
+      "tier": null,
+      "body": "CareCompass helps you find local services. It does not provide medical advice or diagnose conditions. Always follow the guidance of a qualified healthcare professional."
+    }
+  }
+}

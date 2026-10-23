@@ -1,0 +1,138 @@
+{
+  "demo_data": true,
+  "note": "Synthetic test scenarios only. Not real patient data. Used to validate the safety-check and service-finder logic end-to-end.",
+  "scenarios": [
+    {
+      "id": "SCN001",
+      "label": "emergency_chest_pain",
+      "tier": "emergency",
+      "area": "Riverside",
+      "user_text": "My dad is clutching his chest and saying it feels like something is crushing him. He's sweating a lot and his left arm hurts. This started about 10 minutes ago.",
+      "expected_tier": "emergency",
+      "expected_service_type": null,
+      "expected_red_flag_id": "RF001",
+      "notes": "Chest pain + radiation — must never reach service search; show emergency message immediately."
+    },
+    {
+      "id": "SCN002",
+      "label": "emergency_stroke",
+      "tier": "emergency",
+      "area": "Greenfield",
+      "user_text": "My mum's face is drooping on one side and her speech is slurred. She can't lift her right arm properly. It came on really suddenly about five minutes ago.",
+      "expected_tier": "emergency",
+      "expected_service_type": null,
+      "expected_red_flag_id": "RF003",
+      "notes": "Classic FAST stroke signs — emergency path only."
+    },
+    {
+      "id": "SCN003",
+      "label": "emergency_anaphylaxis",
+      "tier": "emergency",
+      "area": "Northgate",
+      "user_text": "I ate a peanut by accident and now my throat is swelling and I'm having trouble swallowing. I feel dizzy. I have an EpiPen but I'm scared to use it.",
+      "expected_tier": "emergency",
+      "expected_service_type": null,
+      "expected_red_flag_id": "RF007",
+      "notes": "Anaphylaxis — throat swelling and difficulty swallowing are emergency markers."
+    },
+    {
+      "id": "SCN004",
+      "label": "emergency_pregnancy",
+      "tier": "emergency",
+      "area": "Westbury",
+      "user_text": "I'm 32 weeks pregnant and I've started bleeding quite heavily. I also have a really bad headache and my vision is blurry.",
+      "expected_tier": "emergency",
+      "expected_service_type": null,
+      "expected_red_flag_id": "RF010",
+      "notes": "Pregnant and bleeding heavily — emergency regardless of other context."
+    },
+    {
+      "id": "SCN005",
+      "label": "urgent_self_harm_thoughts",
+      "tier": "urgent",
+      "area": "Northgate",
+      "user_text": "I've been having thoughts of hurting myself lately. I haven't done anything but the thoughts are getting louder and I don't know who to talk to.",
+      "expected_tier": "urgent",
+      "expected_service_type": "specialist",
+      "expected_red_flag_id": "RF009",
+      "notes": "Self-harm ideation — urgent tier, route to mental health specialist."
+    },
+    {
+      "id": "SCN006",
+      "label": "urgent_fever_confusion",
+      "tier": "urgent",
+      "area": "Eastfield",
+      "user_text": "My partner has a very high temperature — I think around 39.5 — and he's confused and not making much sense. This has been going on for about two hours.",
+      "expected_tier": "urgent",
+      "expected_service_type": "hospital_emergency",
+      "expected_red_flag_id": "RF008",
+      "notes": "High fever with confusion — urgent, likely same-day care at walk-in or A&E."
+    },
+    {
+      "id": "SCN007",
+      "label": "urgent_child_ear_pain",
+      "tier": "urgent",
+      "area": "Greenfield",
+      "user_text": "My 4-year-old has been crying all day with ear pain, she has a temperature of 38.5 and she keeps pulling at her ear. She hasn't slept.",
+      "expected_tier": "urgent",
+      "expected_service_type": "primary_care",
+      "expected_red_flag_id": null,
+      "notes": "Acute otitis media signs in a young child — urgent but not emergency; same-day GP."
+    },
+    {
+      "id": "SCN008",
+      "label": "urgent_asthma_worsening",
+      "tier": "urgent",
+      "area": "Riverside",
+      "user_text": "I have asthma and my inhaler isn't helping as much today. I've used it five times already and I'm still quite breathless when I walk across the room.",
+      "expected_tier": "urgent",
+      "expected_service_type": "hospital_emergency",
+      "expected_red_flag_id": null,
+      "notes": "Poor response to reliever inhaler — urgent, not yet full respiratory distress but needs same-day care."
+    },
+    {
+      "id": "SCN009",
+      "label": "routine_repeat_prescription",
+      "tier": "routine",
+      "area": "Westbury",
+      "user_text": "I need to request a repeat prescription for my blood pressure tablets. I have about a week's supply left.",
+      "expected_tier": "routine",
+      "expected_service_type": "pharmacy",
+      "expected_red_flag_id": null,
+      "notes": "Straightforward repeat prescription — routine, route to pharmacy or GP."
+    },
+    {
+      "id": "SCN010",
+      "label": "routine_skin_rash",
+      "tier": "routine",
+      "area": "Eastfield",
+      "user_text": "I've had a mild itchy rash on my forearm for about a week. It's not spreading and I don't have a temperature. It might be a reaction to my new washing powder.",
+      "expected_tier": "routine",
+      "expected_service_type": "primary_care",
+      "expected_red_flag_id": null,
+      "notes": "Mild, stable rash — routine GP appointment appropriate."
+    },
+    {
+      "id": "SCN011",
+      "label": "routine_travel_vaccines",
+      "tier": "routine",
+      "area": "Northgate",
+      "user_text": "I'm travelling to Southeast Asia in six weeks and I want to check which vaccinations I need. I haven't had any travel jabs before.",
+      "expected_tier": "routine",
+      "expected_service_type": "pharmacy",
+      "expected_red_flag_id": null,
+      "notes": "Travel health — routine, pharmacy travel clinic or GP nurse."
+    },
+    {
+      "id": "SCN012",
+      "label": "routine_mental_health_support",
+      "tier": "routine",
+      "area": "Northgate",
+      "user_text": "I've been feeling quite low and anxious for the past few weeks. It's affecting my sleep and my motivation at work. I'm not in crisis but I'd like some support.",
+      "expected_tier": "routine",
+      "expected_service_type": "specialist",
+      "expected_red_flag_id": null,
+      "notes": "Low mood and anxiety without crisis indicators — routine, route to IAPT/mental health specialist."
+    }
+  ]
+}

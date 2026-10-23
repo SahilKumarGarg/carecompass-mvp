@@ -1,0 +1,164 @@
+{
+  "demo_data": true,
+  "note": "All red-flag rules are synthetic demo content. Not for clinical use.",
+  "red_flag_categories": [
+    {
+      "id": "RF001",
+      "name": "chest_pain",
+      "tier": "emergency",
+      "description": "Potential cardiac or aortic emergency",
+      "phrases": [
+        "chest pain",
+        "chest tightness",
+        "crushing chest",
+        "pressure in my chest",
+        "chest feels heavy",
+        "pain in my chest",
+        "chest hurts"
+      ]
+    },
+    {
+      "id": "RF002",
+      "name": "trouble_breathing",
+      "tier": "emergency",
+      "description": "Acute respiratory distress",
+      "phrases": [
+        "can't breathe",
+        "cannot breathe",
+        "struggling to breathe",
+        "difficulty breathing",
+        "trouble breathing",
+        "short of breath suddenly",
+        "gasping",
+        "breathing is very hard"
+      ]
+    },
+    {
+      "id": "RF003",
+      "name": "stroke_signs",
+      "tier": "emergency",
+      "description": "Signs consistent with stroke (FAST criteria and related)",
+      "phrases": [
+        "face drooping",
+        "arm weakness",
+        "speech slurred",
+        "slurred speech",
+        "can't speak",
+        "sudden confusion",
+        "sudden severe headache",
+        "vision loss suddenly",
+        "one side weak",
+        "face droops"
+      ]
+    },
+    {
+      "id": "RF004",
+      "name": "severe_bleeding",
+      "tier": "emergency",
+      "description": "Uncontrolled or heavy bleeding",
+      "phrases": [
+        "bleeding won't stop",
+        "bleeding heavily",
+        "blood won't stop",
+        "severe bleeding",
+        "soaking through bandages",
+        "blood pouring",
+        "lots of blood"
+      ]
+    },
+    {
+      "id": "RF005",
+      "name": "unconscious",
+      "tier": "emergency",
+      "description": "Loss of consciousness or unresponsive person",
+      "phrases": [
+        "unconscious",
+        "not waking up",
+        "passed out",
+        "collapsed",
+        "unresponsive",
+        "fainted and won't wake",
+        "won't respond"
+      ]
+    },
+    {
+      "id": "RF006",
+      "name": "seizure",
+      "tier": "emergency",
+      "description": "Active or prolonged seizure",
+      "phrases": [
+        "having a seizure",
+        "seizure",
+        "fitting",
+        "convulsing",
+        "convulsions",
+        "shaking uncontrollably",
+        "epileptic fit"
+      ]
+    },
+    {
+      "id": "RF007",
+      "name": "severe_allergic_reaction",
+      "tier": "emergency",
+      "description": "Anaphylaxis or severe allergic reaction",
+      "phrases": [
+        "allergic reaction",
+        "anaphylaxis",
+        "throat swelling",
+        "tongue swelling",
+        "lips swelling",
+        "epipen",
+        "can't swallow",
+        "face swelling fast"
+      ]
+    },
+    {
+      "id": "RF008",
+      "name": "confusion_with_fever",
+      "tier": "urgent",
+      "description": "High fever with altered mental state — possible serious infection",
+      "phrases": [
+        "very high temperature and confused",
+        "fever and confused",
+        "burning up and not making sense",
+        "high fever and confused",
+        "temperature and delirious",
+        "fever and can't think straight",
+        "temperature over 39 and confused"
+      ]
+    },
+    {
+      "id": "RF009",
+      "name": "self_harm_thoughts",
+      "tier": "urgent",
+      "description": "Expressions of self-harm or suicidal ideation",
+      "phrases": [
+        "want to hurt myself",
+        "thinking about suicide",
+        "suicidal thoughts",
+        "don't want to be here",
+        "self harm",
+        "harming myself",
+        "thinking about ending it",
+        "want to die",
+        "thoughts of self-harm"
+      ]
+    },
+    {
+      "id": "RF010",
+      "name": "pregnancy_emergency",
+      "tier": "emergency",
+      "description": "Obstetric emergency signs",
+      "phrases": [
+        "pregnant and bleeding",
+        "heavy bleeding in pregnancy",
+        "pregnant and severe pain",
+        "waters broken early",
+        "baby not moving",
+        "contractions every two minutes",
+        "eclampsia",
+        "fitting while pregnant"
+      ]
+    }
+  ]
+}
