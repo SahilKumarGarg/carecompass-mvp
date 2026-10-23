@@ -1,0 +1,66 @@
+{
+  "demo_data": true,
+  "note": "Maps concern keywords to preferred service types, ordered by preference. Not clinical triage.",
+  "care_levels": [
+    {
+      "id": "CL001",
+      "keywords": ["prescription", "repeat prescription", "medication", "medicine", "tablets", "inhaler", "pharmacy"],
+      "preferred_types": ["pharmacy", "primary_care", "telemedicine"],
+      "notes": "Prescription and dispensing needs"
+    },
+    {
+      "id": "CL002",
+      "keywords": ["gp", "doctor", "appointment", "checkup", "check-up", "review", "referral", "vaccination", "immunisation", "vaccine", "jab", "travel"],
+      "preferred_types": ["primary_care", "telemedicine", "pharmacy"],
+      "notes": "General GP and routine care"
+    },
+    {
+      "id": "CL003",
+      "keywords": ["mental health", "anxiety", "depression", "low mood", "stress", "counselling", "therapy", "talking therapy", "self harm", "suicide", "suicidal", "crisis", "psychiatric"],
+      "preferred_types": ["specialist", "primary_care", "telemedicine"],
+      "notes": "Mental health and wellbeing"
+    },
+    {
+      "id": "CL004",
+      "keywords": ["chest", "heart", "cardiac", "breathing", "breathless", "asthma", "inhaler", "wheeze", "wheezing"],
+      "preferred_types": ["hospital_emergency", "primary_care"],
+      "notes": "Respiratory and cardiac symptoms"
+    },
+    {
+      "id": "CL005",
+      "keywords": ["injury", "wound", "cut", "fracture", "broken bone", "sprain", "bruise", "bleeding", "burn", "scald"],
+      "preferred_types": ["hospital_emergency", "primary_care"],
+      "notes": "Injury and wound care"
+    },
+    {
+      "id": "CL006",
+      "keywords": ["ear", "earache", "ear pain", "throat", "sore throat", "cold", "flu", "infection", "temperature", "fever"],
+      "preferred_types": ["primary_care", "pharmacy", "telemedicine"],
+      "notes": "Common infections and minor illness"
+    },
+    {
+      "id": "CL007",
+      "keywords": ["rash", "skin", "eczema", "allergy", "allergic", "hives", "itchy", "swelling"],
+      "preferred_types": ["primary_care", "pharmacy", "specialist"],
+      "notes": "Skin and allergic conditions"
+    },
+    {
+      "id": "CL008",
+      "keywords": ["diabetes", "blood sugar", "insulin", "thyroid", "endocrine", "cholesterol", "blood pressure"],
+      "preferred_types": ["specialist", "primary_care"],
+      "notes": "Chronic disease management"
+    },
+    {
+      "id": "CL009",
+      "keywords": ["pregnancy", "pregnant", "antenatal", "baby", "newborn", "midwife", "labour", "birth"],
+      "preferred_types": ["hospital_emergency", "primary_care"],
+      "notes": "Pregnancy and maternity"
+    },
+    {
+      "id": "CL010",
+      "keywords": ["video", "online", "remote", "phone", "telephone", "virtual", "telemedicine"],
+      "preferred_types": ["telemedicine", "primary_care"],
+      "notes": "Remote consultation preference"
+    }
+  ]
+}

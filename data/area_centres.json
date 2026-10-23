@@ -1,0 +1,11 @@
+{
+  "demo_data": true,
+  "note": "Approximate centre coordinates for each demo area, used for haversine distance estimation only. Synthetic data.",
+  "area_centres": {
+    "Greenfield": {"lat": 51.5214, "lon": -0.1361},
+    "Riverside":  {"lat": 51.5049, "lon": -0.1174},
+    "Northgate":  {"lat": 51.5511, "lon": -0.1063},
+    "Eastfield":  {"lat": 51.5300, "lon": -0.0700},
+    "Westbury":   {"lat": 51.4905, "lon": -0.2105}
+  }
+}
