@@ -1,0 +1,5 @@
+streamlit
+pytest
+python-dotenv
+# Optional, only if you use watsonx.ai:
+# ibm-watsonx-ai
