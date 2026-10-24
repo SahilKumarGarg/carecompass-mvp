@@ -91,6 +91,61 @@
       "notes": "Poor response to reliever inhaler — urgent, not yet full respiratory distress but needs same-day care."
     },
     {
+      "id": "SCN013",
+      "label": "urgent_fever_disoriented",
+      "tier": "urgent",
+      "area": "Greenfield",
+      "user_text": "My mother-in-law has had fever and weakness for two days and is confused at times.",
+      "expected_tier": "urgent",
+      "expected_service_type": "hospital_emergency",
+      "expected_red_flag_id": "RF008",
+      "notes": "Original bug-fix sentence — fever + confusion via term_groups RF008."
+    },
+    {
+      "id": "SCN014",
+      "label": "urgent_explicit_suicidal",
+      "tier": "urgent",
+      "area": "Riverside",
+      "user_text": "I can't stop thinking about suicide. I haven't acted on it but it is taking over my thoughts every day.",
+      "expected_tier": "urgent",
+      "expected_service_type": "specialist",
+      "expected_red_flag_id": "RF009",
+      "notes": "Explicit suicidal ideation — urgent, mental health specialist."
+    },
+    {
+      "id": "SCN015",
+      "label": "urgent_feverish_muddled",
+      "tier": "urgent",
+      "area": "Westbury",
+      "user_text": "My dad is feverish and has been muddled and not himself since this morning. He keeps asking where he is.",
+      "expected_tier": "urgent",
+      "expected_service_type": "hospital_emergency",
+      "expected_red_flag_id": "RF008",
+      "notes": "Feverish + muddled — RF008 term_groups match; different wording from SCN006."
+    },
+    {
+      "id": "SCN016",
+      "label": "urgent_want_to_end_life",
+      "tier": "urgent",
+      "area": "Northgate",
+      "user_text": "Things have become unbearable and I keep thinking I want to end my life. I haven't made a plan but the thoughts won't go away.",
+      "expected_tier": "urgent",
+      "expected_service_type": "specialist",
+      "expected_red_flag_id": "RF009",
+      "notes": "Self-harm/suicidal ideation — RF009 term_groups match via 'end my life'."
+    },
+    {
+      "id": "SCN017",
+      "label": "urgent_sweating_delirious",
+      "tier": "urgent",
+      "area": "Eastfield",
+      "user_text": "He's been sweating heavily all evening and is delirious — he said things that made no sense and didn't recognise me.",
+      "expected_tier": "urgent",
+      "expected_service_type": "hospital_emergency",
+      "expected_red_flag_id": "RF008",
+      "notes": "Sweating + delirium — RF008 term_groups match with synonym 'sweating' and 'delirious'."
+    },
+    {
       "id": "SCN009",
       "label": "routine_repeat_prescription",
       "tier": "routine",

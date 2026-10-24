@@ -1,6 +1,6 @@
 {
   "demo_data": true,
-  "note": "All red-flag rules are synthetic demo content. Not for clinical use.",
+  "note": "All red-flag rules are synthetic demo content. Not for clinical use. Each rule may have 'phrases' (single-substring match) and/or 'term_groups' (all groups must each match at least one synonym; negation-aware).",
   "red_flag_categories": [
     {
       "id": "RF001",
@@ -20,6 +20,19 @@
         "clutching his chest",
         "clutching her chest",
         "clutching my chest"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "chest", "sternum", "breastbone", "left side of chest"
+          ]
+        },
+        {
+          "synonyms": [
+            "pain", "tight", "tightness", "pressure", "heavy", "crushing",
+            "ache", "aching", "squeezing", "burning", "discomfort", "hurts"
+          ]
+        }
       ]
     },
     {
@@ -35,7 +48,24 @@
         "trouble breathing",
         "short of breath suddenly",
         "gasping",
-        "breathing is very hard"
+        "breathing is very hard",
+        "breathless",
+        "short of breath",
+        "out of breath"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "breathe", "breathing", "breath", "breaths", "air", "respiratory"
+          ]
+        },
+        {
+          "synonyms": [
+            "can't", "cannot", "struggling", "difficulty", "trouble",
+            "hard to", "unable to", "very hard", "gasping", "short of",
+            "not able to", "finding it hard"
+          ]
+        }
       ]
     },
     {
@@ -56,6 +86,21 @@
         "vision loss suddenly",
         "one side weak",
         "face droops"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "face", "arm", "leg", "side", "speech", "speak", "talking",
+            "mouth", "eye", "vision"
+          ]
+        },
+        {
+          "synonyms": [
+            "drooping", "droops", "weak", "weakness", "numb", "numbness",
+            "slurred", "slurring", "can't lift", "can't move", "limp",
+            "sudden", "suddenly", "all of a sudden", "dropped", "hanging"
+          ]
+        }
       ]
     },
     {
@@ -71,6 +116,20 @@
         "soaking through bandages",
         "blood pouring",
         "lots of blood"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "bleeding", "blood", "haemorrhage", "hemorrhage", "bleed"
+          ]
+        },
+        {
+          "synonyms": [
+            "won't stop", "won't stop", "heavily", "heavy", "severe",
+            "pouring", "soaking", "lots of", "a lot of", "uncontrolled",
+            "everywhere", "pooling"
+          ]
+        }
       ]
     },
     {
@@ -86,6 +145,15 @@
         "unresponsive",
         "fainted and won't wake",
         "won't respond"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "unconscious", "collapsed", "unresponsive", "passed out",
+            "fainted", "not waking", "limp", "out cold", "not responding",
+            "won't wake", "won't respond", "non-responsive", "gone limp"
+          ]
+        }
       ]
     },
     {
@@ -101,6 +169,21 @@
         "convulsions",
         "shaking uncontrollably",
         "epileptic fit"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "seizure", "fit", "fitting", "convulsion", "convulsions",
+            "convulsing", "shaking", "jerking", "trembling uncontrollably",
+            "epileptic", "twitching", "muscle spasm"
+          ]
+        },
+        {
+          "synonyms": [
+            "having", "having a", "experiencing", "went into",
+            "uncontrollably", "all over", "whole body"
+          ]
+        }
       ]
     },
     {
@@ -119,6 +202,20 @@
         "can't swallow",
         "trouble swallowing",
         "face swelling fast"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "throat", "tongue", "lips", "lip", "face", "airway", "neck"
+          ]
+        },
+        {
+          "synonyms": [
+            "swelling", "swollen", "puffing up", "closing up", "tightening",
+            "can't swallow", "hard to swallow", "trouble swallowing",
+            "swells", "blowing up"
+          ]
+        }
       ]
     },
     {
@@ -136,6 +233,25 @@
         "fever and can't think straight",
         "temperature over 39 and confused",
         "not making much sense"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "fever", "temperature", "high temperature", "burning up",
+            "very hot", "hot to touch", "running a temperature",
+            "febrile", "pyrexia", "sweating", "feverish"
+          ]
+        },
+        {
+          "synonyms": [
+            "confused", "confusion", "disoriented", "disorientated",
+            "not making sense", "making no sense", "not with it",
+            "out of it", "delirious", "delirium", "drowsy", "dazed",
+            "muddled", "incoherent", "doesn't know where", "doesn't recognise",
+            "doesn't know who", "at times confused", "confused at times",
+            "a bit confused", "getting confused", "sometimes confused"
+          ]
+        }
       ]
     },
     {
@@ -155,6 +271,16 @@
         "thinking about ending it",
         "want to die",
         "thoughts of self-harm"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "hurt myself", "harm myself", "harming myself", "hurting myself",
+            "end my life", "kill myself", "take my life", "self harm",
+            "self-harm", "not want to be here", "don't want to be here",
+            "want to die", "suicidal", "suicide", "end it all"
+          ]
+        }
       ]
     },
     {
@@ -173,7 +299,59 @@
         "baby not moving",
         "contractions every two minutes",
         "eclampsia",
-        "fitting while pregnant"
+        "fitting while pregnant",
+        "baby not moving",
+        "foetus not moving",
+        "fetus not moving"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "pregnant", "pregnancy", "weeks pregnant", "trimester",
+            "expecting", "with child", "antenatal", "unborn", "foetus", "fetus"
+          ]
+        },
+        {
+          "synonyms": [
+            "bleeding", "bleed", "blood", "haemorrhage",
+            "severe pain", "fitting", "stopped moving", "hasn't moved",
+            "waters broken", "eclampsia", "contractions", "no movement"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RF011",
+      "name": "fever_in_child",
+      "tier": "urgent",
+      "description": "High fever in an infant or young child — possible serious paediatric infection",
+      "phrases": [
+        "temperature of 38",
+        "temperature of 39",
+        "temperature of 40",
+        "38.5",
+        "39 degrees",
+        "40 degrees",
+        "high temperature and she",
+        "high temperature and he",
+        "burning up and crying",
+        "fever and crying"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "fever", "temperature", "high temperature", "burning up",
+            "very hot", "hot to touch", "running a temperature",
+            "febrile", "feverish", "38.", "39.", "40."
+          ]
+        },
+        {
+          "synonyms": [
+            "child", "baby", "toddler", "infant", "year-old", "years old",
+            "month-old", "months old", "year old", "daughter", "son",
+            "girl", "boy", "newborn", "kid", "little one", "she has", "he has"
+          ]
+        }
       ]
     }
   ]

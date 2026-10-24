@@ -5,7 +5,8 @@ Checks performed (in order):
 2. Every service name cited in the answer exists in services.json.
 3. Every phone number cited in the answer exists in services.json.
 4. The answer contains no banned diagnosis or treatment phrases.
-5. The last-verified date for each cited service appears in the answer text.
+5. The last-verified date for each cited service appears in the answer text,
+   OR a "days ago — call ahead" stale warning is present (for stale services).
 6. When tier is "urgent", the answer contains an urgent-action prompt.
 
 Returns CheckResult(passed=True) or CheckResult(passed=False, problems=[...]).
@@ -160,16 +161,35 @@ def _check_banned_phrases(answer_text: str) -> list[str]:
 
 def _check_last_verified(answer_text: str, cited_ids: list[str],
                          index: dict[str, dict]) -> list[str]:
-    """Return problems for any cited service whose last-verified date is absent from the answer."""
+    """Return problems for any cited service whose verification info is absent from the answer.
+
+    Passes when the answer contains either:
+    - the raw ISO date string (fresh services), or
+    - a "days ago" stale warning that includes "call ahead" (stale services).
+    """
+    import datetime as _dt
     problems: list[str] = []
     for sid in cited_ids:
         if sid not in index:
             continue
-        date = index[sid].get("last_verified", "")
-        if date and date not in answer_text:
-            problems.append(
-                f"last_verified date '{date}' for service {sid} is missing from the answer."
-            )
+        date_str = index[sid].get("last_verified", "")
+        if not date_str:
+            continue
+        # Fresh path: date appears verbatim in the answer.
+        if date_str in answer_text:
+            continue
+        # Stale path: if the service is stale, the advisor replaces the date with
+        # "Last verified N days ago — call ahead …".  Accept this as valid.
+        try:
+            verified = _dt.date.fromisoformat(date_str)
+            age = ((_dt.date.today() - verified).days)
+        except ValueError:
+            age = None
+        if age is not None and str(age) in answer_text and "call ahead" in answer_text.lower():
+            continue
+        problems.append(
+            f"last_verified date '{date_str}' for service {sid} is missing from the answer."
+        )
     return problems
 
 

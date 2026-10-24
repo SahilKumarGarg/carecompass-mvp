@@ -46,6 +46,8 @@ _TIER_BADGE: dict[str, str] = {
     "routine":   "🟢 Routine",
 }
 
+_URGENT_ACTION = "Please go to the first option without delay."
+
 # ---------------------------------------------------------------------------
 # Session state initialisation
 # ---------------------------------------------------------------------------
@@ -102,6 +104,48 @@ def _render_recommendation_card(result: SessionResult) -> None:
                 st.markdown("**Distance:** Online — no travel needed")
             st.markdown(f"**Last verified:** {svc.last_verified}")
         st.markdown(f"*{best.reason}*")
+
+
+def _build_why_line(result: SessionResult) -> str:
+    """Return a short 'Why' string listing the rule names that fired, or empty string."""
+    if result.safety is None or not result.safety.hits:
+        return ""
+    names = [h.name.replace("_", " ") for h in result.safety.hits]
+    # Deduplicate while preserving order.
+    seen: set[str] = set()
+    unique: list[str] = []
+    for n in names:
+        if n not in seen:
+            seen.add(n)
+            unique.append(n)
+    return "Why: " + ", ".join(unique)
+
+
+def _render_tier_banner(result: SessionResult) -> None:
+    """Render the tier badge, Why line, and (for urgent) the action prompt."""
+    tier = result.tier
+    badge = _TIER_BADGE.get(tier, tier)
+    why = _build_why_line(result)
+
+    if tier == "emergency":
+        badge_md = f"**{badge}**"
+        if why:
+            st.error(f"{badge_md}  \n{why}")
+        else:
+            st.error(badge_md)
+    elif tier == "urgent":
+        badge_md = f"**{badge}**"
+        lines = [badge_md]
+        if why:
+            lines.append(why)
+        lines.append(f"⚠️ {_URGENT_ACTION}")
+        st.warning("  \n".join(lines))
+    else:
+        badge_md = f"**{badge}**"
+        if why:
+            st.info(f"{badge_md}  \n{why}")
+        else:
+            st.info(badge_md)
 
 
 def _render_service_table(result: SessionResult) -> None:
@@ -196,6 +240,8 @@ def main() -> None:
     if result is not None and result.state not in ("describe",):
         tier_badge = _TIER_BADGE.get(result.tier, result.tier)
 
+        _render_tier_banner(result)
+
         if result.tier == "emergency":
             st.error(result.answer_text)
 
@@ -203,7 +249,6 @@ def main() -> None:
             st.warning(result.answer_text)
 
         else:
-            st.info(f"**Urgency:** {tier_badge}")
             _render_recommendation_card(result)
             _render_service_table(result)
 

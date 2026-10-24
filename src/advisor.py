@@ -24,6 +24,7 @@ _WEIGHTS_URGENT:  tuple[float, float, float, float] = (0.25, 0.35, 0.30, 0.10)
 
 _MAX_DISTANCE_KM = 10.0   # beyond this, distance score is 0
 _FRESHNESS_DAYS = 90      # data older than this scores 0 on freshness
+_STALE_DAYS = 60          # threshold: show "call ahead" warning + extra ranking penalty
 
 
 # ---------------------------------------------------------------------------
@@ -63,16 +64,35 @@ def _score_open(candidate: ServiceCandidate) -> float:
     return 1.0 if candidate.open_24h else 0.5
 
 
-def _score_freshness(candidate: ServiceCandidate) -> float:
-    """More recently verified = higher score.  Scores 0 if > _FRESHNESS_DAYS old."""
+def _days_since_verified(candidate: ServiceCandidate) -> int | None:
+    """Return the number of days since last_verified, or None if unparseable."""
     try:
         verified = datetime.date.fromisoformat(candidate.last_verified)
-        age_days = (datetime.date.today() - verified).days
-        if age_days < 0:
-            age_days = 0
-        return max(0.0, 1.0 - age_days / _FRESHNESS_DAYS)
+        age = (datetime.date.today() - verified).days
+        return max(0, age)
     except (ValueError, TypeError):
+        return None
+
+
+def _is_stale(candidate: ServiceCandidate) -> bool:
+    """Return True when last_verified is more than _STALE_DAYS days ago."""
+    age = _days_since_verified(candidate)
+    return age is None or age > _STALE_DAYS
+
+
+def _score_freshness(candidate: ServiceCandidate) -> float:
+    """More recently verified = higher score.  Scores 0 if > _FRESHNESS_DAYS old.
+
+    An extra penalty of 0.3 is applied when data is stale (> _STALE_DAYS days),
+    so stale services rank meaningfully lower than fresh ones.
+    """
+    age = _days_since_verified(candidate)
+    if age is None:
         return 0.0
+    base = max(0.0, 1.0 - age / _FRESHNESS_DAYS)
+    if age > _STALE_DAYS:
+        base = max(0.0, base - 0.3)
+    return base
 
 
 def _composite_score(candidate: ServiceCandidate, tier: str) -> float:
@@ -111,7 +131,13 @@ def _build_reason_template(candidate: ServiceCandidate) -> str:
     offered = ", ".join(candidate.services_offered[:3])
     parts.append(f"Services include: {offered}.")
 
-    parts.append(f"Data last verified: {candidate.last_verified}.")
+    age = _days_since_verified(candidate)
+    if age is not None and age > _STALE_DAYS:
+        parts.append(
+            f"Last verified {age} days ago — call ahead to confirm details are still current."
+        )
+    else:
+        parts.append(f"Data last verified: {candidate.last_verified}.")
     parts.append(f"Phone: {candidate.phone}.")
 
     return " ".join(parts)

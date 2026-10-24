@@ -1,13 +1,13 @@
 {
   "demo_data": true,
-  "note": "Verbatim messages shown to users. Not medical advice. {emergency_number} is replaced at runtime from the EMERGENCY_NUMBER environment variable.",
+  "note": "Verbatim messages shown to users. Not medical advice. {emergency_number} is replaced at runtime from EMERGENCY_NUMBER env var; {emergency_region} from EMERGENCY_REGION env var.",
   "messages": {
     "emergency": {
       "id": "MSG_EMERGENCY",
       "tier": "emergency",
       "heading": "This sounds like an emergency.",
       "body": "Based on what you have described, you need emergency help right now. Please call {emergency_number} immediately or ask someone nearby to call for you. Do not drive yourself. Stay on the line with the operator — they will tell you what to do while help is on the way.",
-      "additional_note": "If you cannot call, text 999 (UK) or ask anyone nearby to help you.",
+      "additional_note": "If you cannot call, text {emergency_number} or ask anyone nearby to help you.",
       "do_not_wait_reason": "Delaying emergency care can be life-threatening."
     },
     "urgent": {
@@ -15,7 +15,7 @@
       "tier": "urgent",
       "heading": "You should be seen today.",
       "body": "What you have described needs attention today. Please contact an urgent care centre, your GP surgery for a same-day appointment, or call {emergency_number} if things get worse quickly. Do not wait more than a few hours.",
-      "escalation_prompt": "If you feel significantly worse, or develop any of the following — difficulty breathing, chest pain, loss of consciousness — call {emergency_number} straight away."
+      "escalation_prompt": "If you feel significantly worse, or develop any of the following — difficulty breathing, chest pain, loss of consciousness — call {emergency_number} ({emergency_region}) straight away."
     },
     "needs_human_review": {
       "id": "MSG_REVIEW",

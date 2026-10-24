@@ -7,16 +7,22 @@
       "name": "Greenfield Community Pharmacy",
       "type": "pharmacy",
       "area": "Greenfield",
-      "lat": 51.5200,
-      "lon": -0.1350,
-      "services_offered": ["prescription dispensing", "minor illness advice", "blood pressure check"],
+      "lat": 51.52,
+      "lon": -0.135,
+      "services_offered": [
+        "prescription dispensing",
+        "minor illness advice",
+        "blood pressure check"
+      ],
       "hours": "Mon-Fri 08:00-19:00, Sat 09:00-17:00, Sun closed",
       "open_24h": false,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "NHS prescriptions at standard charge; private prescriptions charged",
-      "phone": "020-7000-0101",
+      "phone": "[DEMO-0101]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-20"
+      "last_verified": "2026-10-18"
     },
     {
       "id": "SVC002",
@@ -24,47 +30,68 @@
       "type": "primary_care",
       "area": "Greenfield",
       "lat": 51.5215,
-      "lon": -0.1370,
-      "services_offered": ["GP appointments", "chronic disease management", "childhood immunisations", "mental health referrals"],
+      "lon": -0.137,
+      "services_offered": [
+        "GP appointments",
+        "chronic disease management",
+        "childhood immunisations",
+        "mental health referrals"
+      ],
       "hours": "Mon-Fri 08:00-18:30",
       "open_24h": false,
-      "languages": ["English", "Urdu"],
+      "languages": [
+        "English",
+        "Urdu"
+      ],
       "cost_note": "NHS registered patients only",
-      "phone": "020-7000-0102",
+      "phone": "[DEMO-0102]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-22"
+      "last_verified": "2026-10-05"
     },
     {
       "id": "SVC003",
       "name": "Greenfield Urgent Treatment Centre",
       "type": "hospital_emergency",
       "area": "Greenfield",
-      "lat": 51.5230,
-      "lon": -0.1390,
-      "services_offered": ["minor injuries", "urgent walk-in care", "X-ray"],
+      "lat": 51.523,
+      "lon": -0.139,
+      "services_offered": [
+        "minor injuries",
+        "urgent walk-in care",
+        "X-ray"
+      ],
       "hours": "Mon-Sun 07:00-22:00",
       "open_24h": false,
-      "languages": ["English", "Polish"],
+      "languages": [
+        "English",
+        "Polish"
+      ],
       "cost_note": "Free at point of use (NHS)",
-      "phone": "020-7000-0103",
+      "phone": "[DEMO-0103]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-06-01"
+      "last_verified": "2026-10-08"
     },
     {
       "id": "SVC004",
       "name": "Greenfield Diabetes & Endocrine Clinic",
       "type": "specialist",
       "area": "Greenfield",
-      "lat": 51.5210,
+      "lat": 51.521,
       "lon": -0.1355,
-      "services_offered": ["diabetes management", "thyroid disorders", "insulin education"],
+      "services_offered": [
+        "diabetes management",
+        "thyroid disorders",
+        "insulin education"
+      ],
       "hours": "Tue-Thu 09:00-17:00",
       "open_24h": false,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "NHS referral required",
-      "phone": "020-7000-0104",
+      "phone": "[DEMO-0104]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-28"
+      "last_verified": "2026-09-27"
     },
     {
       "id": "SVC005",
@@ -73,62 +100,92 @@
       "area": "Greenfield",
       "lat": null,
       "lon": null,
-      "services_offered": ["GP video consultation", "sick note requests", "repeat prescription review"],
+      "services_offered": [
+        "GP video consultation",
+        "sick note requests",
+        "repeat prescription review"
+      ],
       "hours": "Mon-Sun 07:00-23:00",
       "open_24h": false,
-      "languages": ["English", "French"],
+      "languages": [
+        "English",
+        "French"
+      ],
       "cost_note": "£25 per consultation; NHS referrals accepted",
-      "phone": "020-7000-0105",
+      "phone": "[DEMO-0105]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-06-02"
+      "last_verified": "2026-09-26"
     },
     {
       "id": "SVC006",
       "name": "Riverside 24-Hour Pharmacy",
       "type": "pharmacy",
       "area": "Riverside",
-      "lat": 51.5050,
-      "lon": -0.1180,
-      "services_offered": ["prescription dispensing", "emergency contraception", "travel vaccinations"],
+      "lat": 51.505,
+      "lon": -0.118,
+      "services_offered": [
+        "prescription dispensing",
+        "emergency contraception",
+        "travel vaccinations"
+      ],
       "hours": "Mon-Sun 00:00-24:00",
       "open_24h": true,
-      "languages": ["English", "Arabic"],
+      "languages": [
+        "English",
+        "Arabic"
+      ],
       "cost_note": "NHS prescriptions at standard charge",
-      "phone": "020-7000-0201",
+      "phone": "[DEMO-0201]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-06-03"
+      "last_verified": "2026-09-26"
     },
     {
       "id": "SVC007",
       "name": "Riverside Medical Centre",
       "type": "primary_care",
       "area": "Riverside",
-      "lat": 51.5060,
-      "lon": -0.1190,
-      "services_offered": ["GP appointments", "antenatal care", "child health", "mental health support"],
+      "lat": 51.506,
+      "lon": -0.119,
+      "services_offered": [
+        "GP appointments",
+        "antenatal care",
+        "child health",
+        "mental health support"
+      ],
       "hours": "Mon-Fri 08:00-18:00",
       "open_24h": false,
-      "languages": ["English", "Bengali", "Somali"],
+      "languages": [
+        "English",
+        "Bengali",
+        "Somali"
+      ],
       "cost_note": "NHS registered patients only",
-      "phone": "020-7000-0202",
+      "phone": "[DEMO-0202]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-25"
+      "last_verified": "2026-10-08"
     },
     {
       "id": "SVC008",
       "name": "St Agatha's Hospital A&E",
       "type": "hospital_emergency",
       "area": "Riverside",
-      "lat": 51.5040,
-      "lon": -0.1160,
-      "services_offered": ["emergency care", "resuscitation", "acute medicine", "trauma"],
+      "lat": 51.504,
+      "lon": -0.116,
+      "services_offered": [
+        "emergency care",
+        "resuscitation",
+        "acute medicine",
+        "trauma"
+      ],
       "hours": "Mon-Sun 00:00-24:00",
       "open_24h": true,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "Free at point of use (NHS)",
-      "phone": "020-7000-0203",
+      "phone": "[DEMO-0203]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-06-04"
+      "last_verified": "2026-10-24"
     },
     {
       "id": "SVC009",
@@ -137,14 +194,21 @@
       "area": "Riverside",
       "lat": 51.5045,
       "lon": -0.1165,
-      "services_offered": ["ECG", "echocardiography", "heart failure clinic", "arrhythmia management"],
+      "services_offered": [
+        "ECG",
+        "echocardiography",
+        "heart failure clinic",
+        "arrhythmia management"
+      ],
       "hours": "Mon-Fri 09:00-16:00",
       "open_24h": false,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "NHS referral required",
-      "phone": "020-7000-0204",
+      "phone": "[DEMO-0204]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-30"
+      "last_verified": "2026-10-19"
     },
     {
       "id": "SVC010",
@@ -153,62 +217,90 @@
       "area": "Riverside",
       "lat": null,
       "lon": null,
-      "services_offered": ["video GP consultation", "prescription requests", "mental health triage"],
+      "services_offered": [
+        "video GP consultation",
+        "prescription requests",
+        "mental health triage"
+      ],
       "hours": "Mon-Sun 06:00-22:00",
       "open_24h": false,
-      "languages": ["English", "Hindi"],
+      "languages": [
+        "English",
+        "Hindi"
+      ],
       "cost_note": "Free with NHS referral; £20 self-pay",
-      "phone": "020-7000-0205",
+      "phone": "[DEMO-0205]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-29"
+      "last_verified": "2026-10-08"
     },
     {
       "id": "SVC011",
       "name": "Northgate Late-Night Pharmacy",
       "type": "pharmacy",
       "area": "Northgate",
-      "lat": 51.5500,
-      "lon": -0.1050,
-      "services_offered": ["prescription dispensing", "OTC medicines", "flu vaccination"],
+      "lat": 51.55,
+      "lon": -0.105,
+      "services_offered": [
+        "prescription dispensing",
+        "OTC medicines",
+        "flu vaccination"
+      ],
       "hours": "Mon-Fri 08:00-22:00, Sat-Sun 10:00-20:00",
       "open_24h": false,
-      "languages": ["English", "Turkish"],
+      "languages": [
+        "English",
+        "Turkish"
+      ],
       "cost_note": "NHS prescriptions at standard charge",
-      "phone": "020-7000-0301",
+      "phone": "[DEMO-0301]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-18"
+      "last_verified": "2026-09-25"
     },
     {
       "id": "SVC012",
       "name": "Northgate Health Hub",
       "type": "primary_care",
       "area": "Northgate",
-      "lat": 51.5510,
-      "lon": -0.1060,
-      "services_offered": ["GP appointments", "smoking cessation", "weight management", "sexual health"],
+      "lat": 51.551,
+      "lon": -0.106,
+      "services_offered": [
+        "GP appointments",
+        "smoking cessation",
+        "weight management",
+        "sexual health"
+      ],
       "hours": "Mon-Fri 08:00-20:00, Sat 09:00-13:00",
       "open_24h": false,
-      "languages": ["English", "Romanian"],
+      "languages": [
+        "English",
+        "Romanian"
+      ],
       "cost_note": "NHS registered patients only",
-      "phone": "020-7000-0302",
+      "phone": "[DEMO-0302]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-06-01"
+      "last_verified": "2026-10-12"
     },
     {
       "id": "SVC013",
       "name": "Northgate Walk-In Centre",
       "type": "hospital_emergency",
       "area": "Northgate",
-      "lat": 51.5520,
-      "lon": -0.1070,
-      "services_offered": ["minor injuries", "infections", "wound care"],
+      "lat": 51.552,
+      "lon": -0.107,
+      "services_offered": [
+        "minor injuries",
+        "infections",
+        "wound care"
+      ],
       "hours": "Mon-Sun 08:00-20:00",
       "open_24h": false,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "Free at point of use (NHS)",
-      "phone": "020-7000-0303",
+      "phone": "[DEMO-0303]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-27"
+      "last_verified": "2026-10-19"
     },
     {
       "id": "SVC014",
@@ -217,14 +309,20 @@
       "area": "Northgate",
       "lat": 51.5515,
       "lon": -0.1065,
-      "services_offered": ["IAPT talking therapies", "crisis assessment", "community psychiatric nursing"],
+      "services_offered": [
+        "IAPT talking therapies",
+        "crisis assessment",
+        "community psychiatric nursing"
+      ],
       "hours": "Mon-Fri 09:00-17:00",
       "open_24h": false,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "NHS referral required; self-referral to IAPT available",
-      "phone": "020-7000-0304",
+      "phone": "[DEMO-0304]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-31"
+      "last_verified": "2026-10-18"
     },
     {
       "id": "SVC015",
@@ -233,94 +331,137 @@
       "area": "Northgate",
       "lat": null,
       "lon": null,
-      "services_offered": ["GP video consultation", "dermatology photo review", "prescription renewal"],
+      "services_offered": [
+        "GP video consultation",
+        "dermatology photo review",
+        "prescription renewal"
+      ],
       "hours": "Mon-Sun 08:00-20:00",
       "open_24h": false,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "£30 per consultation",
-      "phone": "020-7000-0305",
+      "phone": "[DEMO-0305]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-06-02"
+      "last_verified": "2026-10-02"
     },
     {
       "id": "SVC016",
       "name": "Eastfield Boots Pharmacy",
       "type": "pharmacy",
       "area": "Eastfield",
-      "lat": 51.5300,
-      "lon": -0.0700,
-      "services_offered": ["prescription dispensing", "blood pressure monitoring", "travel health advice"],
+      "lat": 51.53,
+      "lon": -0.07,
+      "services_offered": [
+        "prescription dispensing",
+        "blood pressure monitoring",
+        "travel health advice"
+      ],
       "hours": "Mon-Fri 09:00-18:00, Sat 09:00-17:00",
       "open_24h": false,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "NHS prescriptions at standard charge",
-      "phone": "020-7000-0401",
+      "phone": "[DEMO-0401]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-21"
+      "last_verified": "2026-09-24"
     },
     {
       "id": "SVC017",
       "name": "Eastfield Surgery",
       "type": "primary_care",
       "area": "Eastfield",
-      "lat": 51.5310,
-      "lon": -0.0710,
-      "services_offered": ["GP appointments", "elderly care", "long-term conditions", "minor surgery"],
+      "lat": 51.531,
+      "lon": -0.071,
+      "services_offered": [
+        "GP appointments",
+        "elderly care",
+        "long-term conditions",
+        "minor surgery"
+      ],
       "hours": "Mon-Fri 08:00-18:00",
       "open_24h": false,
-      "languages": ["English", "Gujarati"],
+      "languages": [
+        "English",
+        "Gujarati"
+      ],
       "cost_note": "NHS registered patients only",
-      "phone": "020-7000-0402",
+      "phone": "[DEMO-0402]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-24"
+      "last_verified": "2026-10-21"
     },
     {
       "id": "SVC018",
       "name": "Eastfield Hospital A&E",
       "type": "hospital_emergency",
       "area": "Eastfield",
-      "lat": 51.5290,
-      "lon": -0.0690,
-      "services_offered": ["emergency care", "paediatric A&E", "acute medicine", "fracture clinic"],
+      "lat": 51.529,
+      "lon": -0.069,
+      "services_offered": [
+        "emergency care",
+        "paediatric A&E",
+        "acute medicine",
+        "fracture clinic"
+      ],
       "hours": "Mon-Sun 00:00-24:00",
       "open_24h": true,
-      "languages": ["English"],
+      "languages": [
+        "English"
+      ],
       "cost_note": "Free at point of use (NHS)",
-      "phone": "020-7000-0403",
+      "phone": "[DEMO-0403]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-06-03"
+      "last_verified": "2026-10-10"
     },
     {
       "id": "SVC019",
       "name": "Westbury Community Pharmacy",
       "type": "pharmacy",
       "area": "Westbury",
-      "lat": 51.4900,
-      "lon": -0.2100,
-      "services_offered": ["prescription dispensing", "Medicines Use Review", "inhaler technique advice"],
+      "lat": 51.49,
+      "lon": -0.21,
+      "services_offered": [
+        "prescription dispensing",
+        "Medicines Use Review",
+        "inhaler technique advice"
+      ],
       "hours": "Mon-Fri 09:00-18:30, Sat 09:00-13:00",
       "open_24h": false,
-      "languages": ["English", "Portuguese"],
+      "languages": [
+        "English",
+        "Portuguese"
+      ],
       "cost_note": "NHS prescriptions at standard charge",
-      "phone": "020-7000-0501",
+      "phone": "[DEMO-0501]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-05-19"
+      "last_verified": "2026-10-13"
     },
     {
       "id": "SVC020",
       "name": "Westbury Primary Care Network",
       "type": "primary_care",
       "area": "Westbury",
-      "lat": 51.4910,
-      "lon": -0.2110,
-      "services_offered": ["GP appointments", "physiotherapy self-referral", "health checks", "refugee health"],
+      "lat": 51.491,
+      "lon": -0.211,
+      "services_offered": [
+        "GP appointments",
+        "physiotherapy self-referral",
+        "health checks",
+        "refugee health"
+      ],
       "hours": "Mon-Fri 08:00-18:00, extended hours Fri 18:00-20:00",
       "open_24h": false,
-      "languages": ["English", "Spanish", "Tigrinya"],
+      "languages": [
+        "English",
+        "Spanish",
+        "Tigrinya"
+      ],
       "cost_note": "NHS registered patients only",
-      "phone": "020-7000-0502",
+      "phone": "[DEMO-0502]",
       "source": "demo_directory_v1",
-      "last_verified": "2025-06-01"
+      "last_verified": "2026-10-23"
     }
   ]
 }

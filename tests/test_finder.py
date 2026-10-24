@@ -29,6 +29,7 @@ def _case(concern: str = "headache", area: str = "Greenfield", who: str = "mysel
         missing_fields=[],
         confidence="offline",
         confidence_score=1.0,
+        denied_symptoms=[],
     )
 
 

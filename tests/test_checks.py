@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from src.checks import (
@@ -16,15 +19,31 @@ from src.checks import (
 )
 
 # ---------------------------------------------------------------------------
-# Fixtures: real service data from services.json (SVC001 + SVC002)
+# Fixtures: real service data from services.json (SVC001, SVC002, SVC003)
 # ---------------------------------------------------------------------------
+# Dates are read live so tests remain valid after scripts/refresh_dates.py runs.
 
-# SVC001: Greenfield Community Pharmacy, phone 020-7000-0101, last_verified 2025-05-20
-# SVC002: Greenfield Family Practice,    phone 020-7000-0102, last_verified 2025-05-22
+_SERVICES_PATH = Path(__file__).parent.parent / "data" / "services.json"
+_SERVICE_INDEX: dict[str, dict] = {
+    s["id"]: s
+    for s in json.loads(_SERVICES_PATH.read_text(encoding="utf-8"))["services"]
+}
+
+_SVC001 = _SERVICE_INDEX["SVC001"]   # Greenfield Community Pharmacy
+_SVC002 = _SERVICE_INDEX["SVC002"]   # Greenfield Family Practice
+_SVC003 = _SERVICE_INDEX["SVC003"]   # Greenfield Urgent Treatment Centre
+
+_DATE001 = _SVC001["last_verified"]
+_DATE002 = _SVC002["last_verified"]
+_DATE003 = _SVC003["last_verified"]
+
+_PHONE001 = _SVC001["phone"]
+_PHONE002 = _SVC002["phone"]
+_PHONE003 = _SVC003["phone"]
 
 _GOOD_ANSWER = (
-    "We recommend Greenfield Community Pharmacy (SVC001). "
-    "Phone: 020-7000-0101. Data last verified: 2025-05-20. "
+    f"We recommend Greenfield Community Pharmacy (SVC001). "
+    f"Phone: {_PHONE001}. Data last verified: {_DATE001}. "
     "They offer prescription dispensing and are about 0.2 km away. "
     "Please call them today to arrange your prescription."
 )
@@ -52,8 +71,8 @@ class TestFinalCheckPassing:
 
     def test_urgent_tier_with_urgent_language_passes(self) -> None:
         text = (
-            "Greenfield Urgent Treatment Centre (SVC003). "
-            "Phone: 020-7000-0103. Data last verified: 2025-06-01. "
+            f"Greenfield Urgent Treatment Centre (SVC003). "
+            f"Phone: {_PHONE003}. Data last verified: {_DATE003}. "
             "You should attend today — do not wait."
         )
         result = final_check(text, ["SVC003"], tier="urgent")
@@ -61,10 +80,10 @@ class TestFinalCheckPassing:
 
     def test_multiple_services_all_present_passes(self) -> None:
         text = (
-            "Option 1: Greenfield Community Pharmacy (SVC001). "
-            "Phone: 020-7000-0101. Last verified: 2025-05-20. "
-            "Option 2: Greenfield Family Practice (SVC002). "
-            "Phone: 020-7000-0102. Last verified: 2025-05-22. "
+            f"Option 1: Greenfield Community Pharmacy (SVC001). "
+            f"Phone: {_PHONE001}. Last verified: {_DATE001}. "
+            f"Option 2: Greenfield Family Practice (SVC002). "
+            f"Phone: {_PHONE002}. Last verified: {_DATE002}. "
             "Please contact them today."
         )
         result = final_check(text, ["SVC001", "SVC002"], tier="routine")
@@ -85,7 +104,7 @@ class TestFinalCheckFailing:
     def test_service_name_missing_from_text_fails(self) -> None:
         """Deliberately bad: cites SVC002 but omits its name from the text."""
         text = (
-            "Please call 020-7000-0102. Data last verified: 2025-05-22. "
+            f"Please call {_PHONE002}. Data last verified: {_DATE002}. "
             "Contact them today for an appointment."
         )
         result = final_check(text, ["SVC002"], tier="routine")
@@ -95,18 +114,18 @@ class TestFinalCheckFailing:
     def test_phone_missing_from_text_fails(self) -> None:
         """Deliberately bad: name and ID present but phone number omitted."""
         text = (
-            "We recommend Greenfield Community Pharmacy (SVC001). "
-            "Data last verified: 2025-05-20. They are nearby."
+            f"We recommend Greenfield Community Pharmacy (SVC001). "
+            f"Data last verified: {_DATE001}. They are nearby."
         )
         result = final_check(text, ["SVC001"], tier="routine")
         assert result.passed is False
-        assert any("020-7000-0101" in p for p in result.problems)
+        assert any(_PHONE001 in p for p in result.problems)
 
     def test_banned_diagnosis_phrase_fails(self) -> None:
         """Deliberately bad: answer contains a banned diagnosis phrase."""
         text = (
-            "Greenfield Community Pharmacy (SVC001). "
-            "Phone: 020-7000-0101. Last verified: 2025-05-20. "
+            f"Greenfield Community Pharmacy (SVC001). "
+            f"Phone: {_PHONE001}. Last verified: {_DATE001}. "
             "You have an infection and should see a pharmacist."
         )
         result = final_check(text, ["SVC001"], tier="routine")
@@ -116,8 +135,8 @@ class TestFinalCheckFailing:
     def test_banned_treatment_phrase_fails(self) -> None:
         """Deliberately bad: answer tells the user to take ibuprofen."""
         text = (
-            "Greenfield Community Pharmacy (SVC001). "
-            "Phone: 020-7000-0101. Last verified: 2025-05-20. "
+            f"Greenfield Community Pharmacy (SVC001). "
+            f"Phone: {_PHONE001}. Last verified: {_DATE001}. "
             "Take ibuprofen for the pain and visit the pharmacist."
         )
         result = final_check(text, ["SVC001"], tier="routine")
@@ -127,18 +146,18 @@ class TestFinalCheckFailing:
     def test_last_verified_missing_fails(self) -> None:
         """Deliberately bad: last-verified date absent from the answer."""
         text = (
-            "Greenfield Community Pharmacy (SVC001). "
-            "Phone: 020-7000-0101. They offer prescriptions."
+            f"Greenfield Community Pharmacy (SVC001). "
+            f"Phone: {_PHONE001}. They offer prescriptions."
         )
         result = final_check(text, ["SVC001"], tier="routine")
         assert result.passed is False
-        assert any("2025-05-20" in p for p in result.problems)
+        assert any(_DATE001 in p for p in result.problems)
 
     def test_urgent_tier_without_urgent_language_fails(self) -> None:
         """Deliberately bad: urgent tier but no urgent-action language."""
         text = (
-            "Greenfield Urgent Treatment Centre (SVC003). "
-            "Phone: 020-7000-0103. Last verified: 2025-06-01. "
+            f"Greenfield Urgent Treatment Centre (SVC003). "
+            f"Phone: {_PHONE003}. Last verified: {_DATE003}. "
             "This centre offers minor injuries care."
         )
         result = final_check(text, ["SVC003"], tier="urgent")

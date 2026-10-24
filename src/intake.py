@@ -21,7 +21,7 @@ from typing import Optional
 class CaseResult:
     """Structured representation of the user's situation."""
 
-    who: str                        # e.g. "myself", "my mum", "my 4-year-old"
+    who: str                        # e.g. "myself", "my mum", "my 6-year-old daughter"
     concern: str                    # main health concern, in the user's own words
     duration: str                   # how long the problem has been going on
     severity_cues: list[str]        # words/phrases that indicate severity
@@ -29,6 +29,7 @@ class CaseResult:
     missing_fields: list[str]       # fields that could not be extracted
     confidence: str                 # "llm" | "offline"
     confidence_score: float         # 0.0–1.0
+    denied_symptoms: list[str]      # negated symptoms e.g. ["no fever", "not in pain"]
 
 
 def _validate(result: CaseResult) -> None:
@@ -41,6 +42,8 @@ def _validate(result: CaseResult) -> None:
         raise ValueError("duration must be a str")
     if not isinstance(result.severity_cues, list):
         raise ValueError("severity_cues must be a list")
+    if not isinstance(result.denied_symptoms, list):
+        raise ValueError("denied_symptoms must be a list")
     if result.confidence not in ("llm", "offline"):
         raise ValueError(f"confidence must be 'llm' or 'offline', got {result.confidence!r}")
     if not (0.0 <= result.confidence_score <= 1.0):
@@ -51,19 +54,52 @@ def _validate(result: CaseResult) -> None:
 # Offline fallback extraction helpers
 # ---------------------------------------------------------------------------
 
+# Relation words used in who-patterns and for stripping from concern.
+_RELATION_WORDS = (
+    "dad|father|mum|mother|mam|brother|sister|son|daughter|"
+    "husband|wife|partner|friend|grandmother|grandfather|gran|grandad|"
+    "child|baby|nephew|niece|uncle|aunt"
+)
+
+# Matches "my 6-year-old daughter", "my 4-year-old", "a 6-year-old"
+# capturing optional relation after the age.
+_WHO_AGE_RE = re.compile(
+    r"\bmy (?P<age>\d+)[- ]year[- ]old"
+    r"(?:\s+(?P<rel>" + _RELATION_WORDS + r"))?",
+    re.I,
+)
+_WHO_AGE_BARE_RE = re.compile(
+    r"\b(?:for |about )?a (?P<age>\d+)[- ]year[- ]old\b",
+    re.I,
+)
+
 _WHO_PATTERNS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"\bmy (?P<rel>dad|father|mum|mother|mam|brother|sister|son|daughter|"
-                r"husband|wife|partner|friend|grandmother|grandfather|gran|grandad|"
-                r"child|baby|nephew|niece|uncle|aunt)\b", re.I), "relation"),
-    (re.compile(r"\bmy (?P<age>\d+)[- ]year[- ]old\b", re.I), "age"),
-    (re.compile(r"\b(?:for |about )?a (?P<age>\d+)[- ]year[- ]old\b", re.I), "age"),
+    (re.compile(
+        r"\bmy (?P<rel>" + _RELATION_WORDS + r")\b",
+        re.I,
+    ), "relation"),
+    (_WHO_AGE_RE, "age_mine"),
+    (_WHO_AGE_BARE_RE, "age_bare"),
     (re.compile(r"\b(?:i am|i'm|i've|i have|i)\b", re.I), "self"),
 ]
 
+# Word-spelled numbers for duration extraction.
+_WORD_NUMS = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+    "eleven": "11", "twelve": "12", "couple": "2", "few": "3",
+}
+
 _DURATION_RE = re.compile(
     r"(?:"
+    # digit-led: "for 3 days", "about 10 minutes ago", "the past 2 weeks"
     r"(?:for |since |about |around |over |the (?:past|last) )?"
     r"(?:\d+\s*(?:second|minute|hour|day|week|month|year)s?)"
+    # word-number led: "three days", "for two weeks", "couple of days"
+    r"|(?:for |about |around |over |the (?:past|last) )?"
+    r"(?:" + "|".join(_WORD_NUMS) + r")"
+    r"(?:\s+of)?\s+(?:second|minute|hour|day|week|month|year)s?"
+    # relative anchors
     r"|since (?:yesterday|this morning|last night|last week|last month)"
     r"|(?:a|an) (?:few (?:minutes|hours|days|weeks)|couple of (?:days|weeks))"
     r"|just now|suddenly|earlier today|this morning|this afternoon|this evening"
@@ -83,30 +119,58 @@ _SEVERITY_WORDS = [
     "heavily", "heavy",
 ]
 
-_CONCERN_STOPWORDS = {
-    "i", "my", "me", "the", "a", "an", "and", "or", "but", "is", "are",
-    "was", "were", "be", "been", "have", "has", "had", "do", "does", "did",
-    "he", "she", "they", "we", "it", "his", "her", "their", "our", "its",
-    "this", "that", "these", "those", "not", "no", "about", "with", "for",
-    "at", "on", "in", "of", "to", "up", "by", "so", "just", "also", "now",
-    "very", "quite", "really", "still", "started", "starting", "started",
-    "feel", "feeling", "feels", "felt", "think", "thought", "know",
-    "ago", "day", "days", "week", "weeks", "hour", "hours", "minute", "minutes",
-    "want", "need", "like", "help", "little", "bit",
+# Negated-symptom extraction: "no fever", "not feverish", "without pain", etc.
+# The second word (optional) must not be a conjunction or common filler.
+_NEGATED_SYMPTOM_RE = re.compile(
+    r"(?:"
+    r"(?:no|not|without|never)\s+(?:any\s+)?"
+    r"(?:[a-z]+(?:\s+(?!and\b|but\b|or\b|so\b|the\b|a\b|an\b)[a-z]+)?)"
+    r")",
+    re.I,
+)
+
+# Filler words that appear in negated matches but aren't symptoms on their own.
+_NEGATION_FILLER = {
+    "no", "not", "without", "never", "any",
+    "i", "my", "the", "a", "an",
+}
+
+# Symptom-like words — a match is kept only if it contains at least one of these.
+_SYMPTOM_WORDS = {
+    "fever", "temperature", "pain", "cough", "vomit", "nausea", "rash",
+    "bleed", "blood", "swelling", "breathless", "breath", "dizzy", "dizziness",
+    "headache", "feverish", "sick", "ache", "aching", "sore", "weakness",
+    "confusion", "confused", "fit", "seizure", "unconscious", "faint",
+    "appetite", "eating", "sleeping", "sleep",
 }
 
 
 def _extract_who_offline(text: str) -> str:
     """Return a short description of who the case is about."""
-    for pattern, kind in _WHO_PATTERNS:
+    # Check age patterns first — "my 6-year-old daughter" is more specific
+    # than matching "my daughter" alone.
+    m = _WHO_AGE_RE.search(text)
+    if m:
+        age = m.group("age")
+        rel = m.group("rel")
+        if rel:
+            return f"my {age}-year-old {rel.lower()}"
+        return f"my {age}-year-old"
+
+    m = _WHO_AGE_BARE_RE.search(text)
+    if m:
+        return f"a {m.group('age')}-year-old"
+
+    # Fall through: check relation and self patterns.
+    # _WHO_PATTERNS[0] = relation, _WHO_PATTERNS[3] = self  (indices 1,2 are age, already done)
+    for idx in (0, 3):
+        pattern, kind = _WHO_PATTERNS[idx]
         m = pattern.search(text)
         if m:
             if kind == "self":
                 return "myself"
             if kind == "relation":
                 return f"my {m.group('rel').lower()}"
-            if kind == "age":
-                return f"a {m.group('age')}-year-old"
     return ""
 
 
@@ -123,21 +187,75 @@ def _extract_severity_cues_offline(text: str) -> list[str]:
 
 
 def _extract_concern_offline(text: str) -> str:
-    """Heuristic: return the longest non-stopword token sequence as the concern."""
-    tokens = re.findall(r"\b[a-z]+\b", text.lower())
-    content = [t for t in tokens if t not in _CONCERN_STOPWORDS and len(t) > 2]
-    if not content:
-        return ""
-    # Return at most the first 8 content words joined, to stay readable.
-    return " ".join(content[:8])
+    """Return the user's own words as the concern.
+
+    Strategy: strip the who-description and duration from the original text,
+    then return what remains (up to ~120 chars), trimmed of leading connectives.
+    Falls back to the full text trimmed if stripping leaves nothing.
+    """
+    working = text.strip()
+
+    # Remove who phrase (e.g. "My 6-year-old daughter", "My mum").
+    working = re.sub(
+        r"(?:my\s+(?:\d+[- ]year[- ]old\s+)?(?:" + _RELATION_WORDS + r")|"
+        r"my\s+\d+[- ]year[- ]old|"
+        r"(?:for |about )?a \d+[- ]year[- ]old)\b",
+        "",
+        working,
+        flags=re.I,
+    )
+
+    # Remove leading connective words left by the strip.
+    working = re.sub(r"^[\s,;.]*(?:has|have|is|was|had|and|but|who|with)\b[\s,;.]*", "", working, flags=re.I)
+
+    # Remove duration phrase.
+    working = _DURATION_RE.sub("", working)
+
+    # Clean up punctuation runs and extra whitespace.
+    working = re.sub(r"\s{2,}", " ", working).strip(" .,;")
+
+    # Return up to 120 chars of what's left, else fall back to full text.
+    result = working[:120].strip(" .,;")
+    return result if result else text[:120].strip()
+
+
+def _extract_denied_symptoms_offline(text: str) -> list[str]:
+    """Return a list of negated symptom phrases (e.g. 'no fever', 'not in pain').
+
+    Only phrases that contain a known symptom word are returned, so generic
+    negations like "no problem" are not included.
+    """
+    found: list[str] = []
+    for m in _NEGATED_SYMPTOM_RE.finditer(text):
+        phrase = m.group(0).strip().lower()
+        # Keep only if the phrase contains a symptom word.
+        words = set(phrase.split())
+        if words & _SYMPTOM_WORDS:
+            found.append(phrase)
+    return found
+
+
+def _clean_denied_from_concern(concern: str, denied: list[str]) -> str:
+    """Remove denied-symptom phrases from the concern string."""
+    result = concern
+    for phrase in denied:
+        result = re.sub(re.escape(phrase), "", result, flags=re.I)
+    # Strip leftover connective words that appear at start/end or doubled-up.
+    result = re.sub(r"\b(?:and|but|or)\b", " ", result, flags=re.I)
+    result = re.sub(r"\s{2,}", " ", result)
+    result = result.strip(" .,;")
+    return result
 
 
 def _offline_extract(user_text: str, area: str) -> CaseResult:
     """Extract case fields using keyword/regex heuristics only."""
     who = _extract_who_offline(user_text)
-    concern = _extract_concern_offline(user_text)
     duration = _extract_duration_offline(user_text)
     severity_cues = _extract_severity_cues_offline(user_text)
+    denied_symptoms = _extract_denied_symptoms_offline(user_text)
+    concern = _clean_denied_from_concern(
+        _extract_concern_offline(user_text), denied_symptoms
+    )
 
     missing: list[str] = []
     filled = 0
@@ -157,6 +275,7 @@ def _offline_extract(user_text: str, area: str) -> CaseResult:
         missing_fields=missing,
         confidence="offline",
         confidence_score=score,
+        denied_symptoms=denied_symptoms,
     )
 
 
@@ -168,7 +287,9 @@ _SYSTEM_PROMPT = (
     "You are a healthcare navigation assistant. "
     "Extract structured information from the user's description. "
     "Respond ONLY with a JSON object with these keys: "
-    "who (string), concern (string), duration (string), severity_cues (list of strings). "
+    "who (string), concern (string), duration (string), "
+    "severity_cues (list of strings), denied_symptoms (list of strings). "
+    "denied_symptoms should contain negated symptom phrases such as 'no fever'. "
     "Do not diagnose. Do not suggest medicines or treatments. "
     "If a field cannot be determined, use an empty string or empty list."
 )
@@ -207,6 +328,8 @@ def _llm_extract(user_text: str, area: str) -> CaseResult:
         duration = str(parsed.get("duration", "")).strip()
         severity_cues_raw = parsed.get("severity_cues", [])
         severity_cues = [str(c) for c in severity_cues_raw] if isinstance(severity_cues_raw, list) else []
+        denied_raw = parsed.get("denied_symptoms", [])
+        denied_symptoms = [str(d) for d in denied_raw] if isinstance(denied_raw, list) else []
 
         missing: list[str] = []
         for field, val in (("who", who), ("concern", concern), ("duration", duration)):
@@ -225,6 +348,7 @@ def _llm_extract(user_text: str, area: str) -> CaseResult:
             missing_fields=missing,
             confidence="llm",
             confidence_score=score,
+            denied_symptoms=denied_symptoms,
         )
         _validate(result)
         return result

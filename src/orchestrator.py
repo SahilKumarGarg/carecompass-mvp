@@ -62,14 +62,29 @@ def _load_messages() -> dict:
         return json.load(fh)["messages"]
 
 
+# Demo defaults — clearly not real values so they cannot be mistaken for genuine
+# emergency contacts if .env is absent.
+_DEMO_EMERGENCY_NUMBER = "[DEMO-999]"
+_DEMO_EMERGENCY_REGION = "DEMO REGION"
+
+
 def _emergency_number() -> str:
-    """Read EMERGENCY_NUMBER from env; fallback to '999'."""
-    return os.environ.get("EMERGENCY_NUMBER", "999").strip() or "999"
+    """Read EMERGENCY_NUMBER from env; fallback to a clearly-labelled demo value."""
+    return os.environ.get("EMERGENCY_NUMBER", "").strip() or _DEMO_EMERGENCY_NUMBER
 
 
-def _fill_emergency_number(text: str) -> str:
-    """Replace {emergency_number} placeholder with the configured value."""
-    return text.replace("{emergency_number}", _emergency_number())
+def _emergency_region() -> str:
+    """Read EMERGENCY_REGION from env; fallback to a clearly-labelled demo value."""
+    return os.environ.get("EMERGENCY_REGION", "").strip() or _DEMO_EMERGENCY_REGION
+
+
+def _fill_placeholders(text: str) -> str:
+    """Replace {emergency_number} and {emergency_region} placeholders."""
+    return (
+        text
+        .replace("{emergency_number}", _emergency_number())
+        .replace("{emergency_region}", _emergency_region())
+    )
 
 
 def _build_answer_text(ranked: list[RankedResult], tier: str) -> str:
@@ -77,7 +92,7 @@ def _build_answer_text(ranked: list[RankedResult], tier: str) -> str:
     if not ranked:
         messages = _load_messages()
         body = messages["needs_human_review"]["body"]
-        return _fill_emergency_number(body)
+        return _fill_placeholders(body)
 
     top = [r for r in ranked if not r.is_fallback]
     fallback = next((r for r in ranked if r.is_fallback), None)
@@ -87,7 +102,7 @@ def _build_answer_text(ranked: list[RankedResult], tier: str) -> str:
         messages = _load_messages()
         urgent_msg = messages["urgent"]
         lines.append(urgent_msg["heading"])
-        lines.append(_fill_emergency_number(urgent_msg["body"]))
+        lines.append(_fill_placeholders(urgent_msg["body"]))
         lines.append("")
 
     for r in top:
@@ -123,6 +138,8 @@ def _build_handoff_summary(
         parts.append(f"Who: {case.who or 'not specified'}")
         parts.append(f"Concern: {case.concern or 'not specified'}")
         parts.append(f"Duration: {case.duration or 'not specified'}")
+        if case.denied_symptoms:
+            parts.append(f"Denied symptoms: {', '.join(case.denied_symptoms)}")
     parts.append(f"Urgency tier: {tier}")
     if ranked:
         top = [r for r in ranked if not r.is_fallback]
@@ -178,6 +195,7 @@ def run_session(
         "concern": case.concern,
         "duration": case.duration,
         "severity_cues": case.severity_cues,
+        "denied_symptoms": case.denied_symptoms,
         "missing_fields": case.missing_fields,
         "confidence": case.confidence,
     })
@@ -196,8 +214,9 @@ def run_session(
     if safety_result.tier == "emergency":
         messages = _load_messages()
         em = messages["emergency"]
-        body = _fill_emergency_number(em["body"])
-        answer = f"🚨 **{em['heading']}**\n\n{body}\n\n*{em['additional_note']}*"
+        body = _fill_placeholders(em["body"])
+        note = _fill_placeholders(em["additional_note"])
+        answer = f"🚨 **{em['heading']}**\n\n{body}\n\n*{note}*"
         audit.log(sid, "emergency_exit", {"answer_preview": answer[:120]})
         return SessionResult(
             session_id=sid,
@@ -264,7 +283,7 @@ def run_session(
         review_msg = messages["needs_human_review"]
         answer_text = (
             f"**{review_msg['heading']}**\n\n"
-            + _fill_emergency_number(review_msg["body"])
+            + _fill_placeholders(review_msg["body"])
         )
         audit.log(sid, "needs_human_review", {})
 

@@ -13,6 +13,10 @@ for _k in ("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"):
 
 from src.orchestrator import (  # noqa: E402
     SessionResult,
+    _DEMO_EMERGENCY_NUMBER,
+    _DEMO_EMERGENCY_REGION,
+    _emergency_number,
+    _emergency_region,
     create_handoff_summary,
     run_session,
 )
@@ -101,9 +105,11 @@ class TestEmergencyPath:
         assert result.needs_human_review is False
 
     def test_emergency_answer_contains_emergency_number(self) -> None:
-        os.environ["EMERGENCY_NUMBER"] = "999"
+        # Set a recognisable test value; verify it appears in the answer.
+        os.environ["EMERGENCY_NUMBER"] = "555-DEMO"
         result = _run("I ate a peanut and my throat is swelling.")
-        assert "999" in result.answer_text
+        assert "555-DEMO" in result.answer_text
+        os.environ.pop("EMERGENCY_NUMBER", None)   # restore so other tests see the default
 
     def test_emergency_no_diagnosis_in_answer(self) -> None:
         result = _run("My dad is clutching his chest and crushing him pain.")
@@ -261,3 +267,78 @@ class TestHandoffSummary:
         assert isinstance(summary, str)
         # session_id hasn't changed
         assert result.session_id == sid
+
+
+# ---------------------------------------------------------------------------
+# Emergency number and region configuration
+# ---------------------------------------------------------------------------
+
+class TestEmergencyConfig:
+    def setup_method(self) -> None:
+        """Ensure env vars are cleared before each test."""
+        os.environ.pop("EMERGENCY_NUMBER", None)
+        os.environ.pop("EMERGENCY_REGION", None)
+
+    def teardown_method(self) -> None:
+        os.environ.pop("EMERGENCY_NUMBER", None)
+        os.environ.pop("EMERGENCY_REGION", None)
+
+    def test_demo_default_number_when_env_unset(self) -> None:
+        assert _emergency_number() == _DEMO_EMERGENCY_NUMBER
+
+    def test_demo_default_region_when_env_unset(self) -> None:
+        assert _emergency_region() == _DEMO_EMERGENCY_REGION
+
+    def test_custom_number_read_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("EMERGENCY_NUMBER", "112")
+        assert _emergency_number() == "112"
+
+    def test_custom_region_read_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("EMERGENCY_REGION", "UK")
+        assert _emergency_region() == "UK"
+
+    def test_blank_env_falls_back_to_demo_number(self, monkeypatch) -> None:
+        monkeypatch.setenv("EMERGENCY_NUMBER", "   ")
+        assert _emergency_number() == _DEMO_EMERGENCY_NUMBER
+
+    def test_blank_env_falls_back_to_demo_region(self, monkeypatch) -> None:
+        monkeypatch.setenv("EMERGENCY_REGION", "")
+        assert _emergency_region() == _DEMO_EMERGENCY_REGION
+
+    def test_demo_number_contains_demo_label(self) -> None:
+        """Demo default must be obviously not a real emergency number."""
+        assert "DEMO" in _DEMO_EMERGENCY_NUMBER or "demo" in _DEMO_EMERGENCY_NUMBER.lower()
+
+    def test_demo_region_contains_demo_label(self) -> None:
+        assert "DEMO" in _DEMO_EMERGENCY_REGION or "demo" in _DEMO_EMERGENCY_REGION.lower()
+
+    def test_emergency_answer_shows_demo_number_when_env_unset(self) -> None:
+        result = _run("I ate a peanut and my throat is swelling.")
+        assert _DEMO_EMERGENCY_NUMBER in result.answer_text
+
+    def test_emergency_answer_shows_configured_number(self, monkeypatch) -> None:
+        monkeypatch.setenv("EMERGENCY_NUMBER", "911")
+        result = _run("I ate a peanut and my throat is swelling.")
+        assert "911" in result.answer_text
+
+    def test_urgent_answer_shows_emergency_region(self, monkeypatch) -> None:
+        monkeypatch.setenv("EMERGENCY_REGION", "TestLand")
+        result = _run(
+            "I've been having thoughts of hurting myself lately.",
+            area="Northgate",
+        )
+        # Region appears in the urgent body message only on non-review paths.
+        if result.tier == "urgent" and not result.needs_human_review:
+            assert "TestLand" in result.answer_text
+
+    def test_no_hardcoded_bare_999_in_answer_when_env_unset(self) -> None:
+        """When EMERGENCY_NUMBER is not set, a bare '999' (not wrapped in the demo label)
+        must NOT appear — the demo default [DEMO-999] is acceptable."""
+        result = _run("I ate a peanut and my throat is swelling.")
+        # The demo default [DEMO-999] is fine; a naked '999' would mean a hardcode slipped through.
+        # We verify the demo label is present and the answer is not bare '999'.
+        assert _DEMO_EMERGENCY_NUMBER in result.answer_text
+        # Check that '999' does not appear outside of the demo label.
+        import re as _re
+        bare = _re.sub(_re.escape(_DEMO_EMERGENCY_NUMBER), "", result.answer_text)
+        assert "999" not in bare

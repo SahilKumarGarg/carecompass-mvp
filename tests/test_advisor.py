@@ -13,8 +13,11 @@ for _k in ("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"):
 
 from src.advisor import (  # noqa: E402
     RankedResult,
+    _STALE_DAYS,
     _build_reason_template,
     _composite_score,
+    _days_since_verified,
+    _is_stale,
     _score_distance,
     _score_fit,
     _score_freshness,
@@ -251,3 +254,186 @@ class TestBuildReasonTemplate:
         c = _candidate(distance_km=1.5)
         r = _build_reason_template(c)
         assert "estimate" in r.lower()
+
+
+# ---------------------------------------------------------------------------
+# _days_since_verified and _is_stale helpers
+# ---------------------------------------------------------------------------
+
+class TestDaysSinceVerified:
+    def test_today_is_zero(self) -> None:
+        c = _candidate(last_verified=datetime.date.today().isoformat())
+        assert _days_since_verified(c) == 0
+
+    def test_yesterday_is_one(self) -> None:
+        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        c = _candidate(last_verified=yesterday)
+        assert _days_since_verified(c) == 1
+
+    def test_invalid_date_returns_none(self) -> None:
+        c = _candidate(last_verified="not-a-date")
+        assert _days_since_verified(c) is None
+
+    def test_known_age(self) -> None:
+        old = (datetime.date.today() - datetime.timedelta(days=45)).isoformat()
+        c = _candidate(last_verified=old)
+        assert _days_since_verified(c) == 45
+
+
+class TestIsStale:
+    def test_fresh_is_not_stale(self) -> None:
+        fresh = datetime.date.today().isoformat()
+        assert not _is_stale(_candidate(last_verified=fresh))
+
+    def test_just_under_threshold_not_stale(self) -> None:
+        just_fresh = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS)).isoformat()
+        assert not _is_stale(_candidate(last_verified=just_fresh))
+
+    def test_one_day_over_threshold_is_stale(self) -> None:
+        stale = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS + 1)).isoformat()
+        assert _is_stale(_candidate(last_verified=stale))
+
+    def test_very_old_is_stale(self) -> None:
+        assert _is_stale(_candidate(last_verified="2020-01-01"))
+
+    def test_invalid_date_is_stale(self) -> None:
+        assert _is_stale(_candidate(last_verified="not-a-date"))
+
+
+# ---------------------------------------------------------------------------
+# Stale freshness score penalty
+# ---------------------------------------------------------------------------
+
+class TestStaleFreshnessPenalty:
+    def test_fresh_score_higher_than_stale_score(self) -> None:
+        fresh = datetime.date.today().isoformat()
+        stale = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS + 10)).isoformat()
+        assert _score_freshness(_candidate(last_verified=fresh)) > \
+               _score_freshness(_candidate(last_verified=stale))
+
+    def test_stale_score_lower_than_without_penalty_would_be(self) -> None:
+        # At _STALE_DAYS + 1 day old, the base score without penalty would be
+        # 1.0 - (61/90) ≈ 0.322.  With the 0.3 penalty it should be ≤ 0.022.
+        stale = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS + 1)).isoformat()
+        score = _score_freshness(_candidate(last_verified=stale))
+        assert score < 0.1   # meaningfully penalised
+
+    def test_stale_score_not_negative(self) -> None:
+        very_stale = (datetime.date.today() - datetime.timedelta(days=89)).isoformat()
+        score = _score_freshness(_candidate(last_verified=very_stale))
+        assert score >= 0.0
+
+    def test_fresh_data_unaffected_by_penalty(self) -> None:
+        # Data verified today should still score 1.0 — no penalty applied.
+        fresh = datetime.date.today().isoformat()
+        assert _score_freshness(_candidate(last_verified=fresh)) == pytest.approx(1.0)
+
+    def test_stale_candidate_ranks_below_fresh_equivalent(self) -> None:
+        """Identical candidates except freshness: fresh one should rank higher."""
+        fresh_date = datetime.date.today().isoformat()
+        stale_date = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS + 5)).isoformat()
+        fresh = _candidate(id="F", last_verified=fresh_date)
+        stale = _candidate(id="S", last_verified=stale_date)
+        results = rank([stale, fresh], "routine")
+        # Fresh candidate should be rank 1.
+        assert results[0].service.id == "F"
+
+
+# ---------------------------------------------------------------------------
+# Stale label in reason string
+# ---------------------------------------------------------------------------
+
+class TestStaleReasonLabel:
+    def test_fresh_shows_date_not_call_ahead(self) -> None:
+        fresh = datetime.date.today().isoformat()
+        r = _build_reason_template(_candidate(last_verified=fresh))
+        assert "call ahead" not in r.lower()
+        assert fresh in r
+
+    def test_stale_shows_call_ahead_message(self) -> None:
+        stale = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS + 5)).isoformat()
+        r = _build_reason_template(_candidate(last_verified=stale))
+        assert "call ahead" in r.lower()
+
+    def test_stale_reason_includes_days_count(self) -> None:
+        age = _STALE_DAYS + 10
+        stale = (datetime.date.today() - datetime.timedelta(days=age)).isoformat()
+        r = _build_reason_template(_candidate(last_verified=stale))
+        assert str(age) in r
+
+    def test_exactly_at_threshold_shows_date_not_call_ahead(self) -> None:
+        # At exactly _STALE_DAYS days old it is NOT stale (> not >=).
+        at_threshold = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS)).isoformat()
+        r = _build_reason_template(_candidate(last_verified=at_threshold))
+        assert "call ahead" not in r.lower()
+
+    def test_one_over_threshold_shows_call_ahead(self) -> None:
+        over = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS + 1)).isoformat()
+        r = _build_reason_template(_candidate(last_verified=over))
+        assert "call ahead" in r.lower()
+
+    def test_stale_rank_result_reason_contains_call_ahead(self) -> None:
+        stale = (datetime.date.today() - datetime.timedelta(days=_STALE_DAYS + 5)).isoformat()
+        results = rank([_candidate(last_verified=stale)], "routine")
+        assert "call ahead" in results[0].reason.lower()
+
+    def test_fresh_rank_result_reason_does_not_contain_call_ahead(self) -> None:
+        fresh = datetime.date.today().isoformat()
+        results = rank([_candidate(last_verified=fresh)], "routine")
+        assert "call ahead" not in results[0].reason.lower()
+
+
+# ---------------------------------------------------------------------------
+# scripts/refresh_dates.py
+# ---------------------------------------------------------------------------
+
+class TestRefreshDatesScript:
+    def test_refresh_dates_updates_all_services(self, tmp_path: pytest.TempPathFactory) -> None:
+        import json, shutil, datetime as dt
+        from scripts.refresh_dates import refresh_dates
+
+        # Write a small fake services.json into tmp.
+        src = {
+            "demo_data": True,
+            "services": [
+                {"id": "S1", "last_verified": "2020-01-01"},
+                {"id": "S2", "last_verified": "2019-06-15"},
+            ],
+        }
+        target = tmp_path / "services.json"
+        target.write_text(json.dumps(src), encoding="utf-8")
+
+        count = refresh_dates(path=target, window_days=30)
+
+        assert count == 2
+        updated = json.loads(target.read_text(encoding="utf-8"))
+        today = dt.date.today()
+        for svc in updated["services"]:
+            d = dt.date.fromisoformat(svc["last_verified"])
+            age = (today - d).days
+            assert 0 <= age <= 30, f"{svc['id']}: age {age} outside 0-30 window"
+
+    def test_refresh_dates_preserves_demo_data_flag(self, tmp_path: pytest.TempPathFactory) -> None:
+        import json
+        from scripts.refresh_dates import refresh_dates
+
+        src = {"demo_data": True, "services": [{"id": "S1", "last_verified": "2020-01-01"}]}
+        target = tmp_path / "services.json"
+        target.write_text(json.dumps(src), encoding="utf-8")
+        refresh_dates(path=target)
+        updated = json.loads(target.read_text(encoding="utf-8"))
+        assert updated["demo_data"] is True
+
+    def test_refresh_dates_produces_valid_iso_dates(self, tmp_path: pytest.TempPathFactory) -> None:
+        import json, datetime as dt
+        from scripts.refresh_dates import refresh_dates
+
+        src = {"demo_data": True, "services": [
+            {"id": f"S{i}", "last_verified": "2020-01-01"} for i in range(5)
+        ]}
+        target = tmp_path / "services.json"
+        target.write_text(json.dumps(src), encoding="utf-8")
+        refresh_dates(path=target)
+        updated = json.loads(target.read_text(encoding="utf-8"))
+        for svc in updated["services"]:
+            dt.date.fromisoformat(svc["last_verified"])  # must not raise

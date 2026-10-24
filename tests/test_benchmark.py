@@ -1,10 +1,20 @@
-"""Benchmark test: runs all 12 scenarios through the full offline workflow.
+"""Benchmark test: runs all scenarios through the full offline workflow.
 
 Metrics reported:
-  - Emergency recall        (must be 100% — test fails if any missed)
-  - Tier agreement          (% of all scenarios where actual_tier == expected_tier)
-  - Service-type agreement  (% of non-emergency scenarios where top service type matches)
-  - Grounding failures      (scenarios where needs_human_review is True)
+  - Emergency recall     (must be 100% — hard test failure if any missed)
+  - Urgent recall        (must be 100% — hard test failure if any under-triaged)
+  - Under-triage count   (emergency/urgent expected but lower tier returned — hard fail)
+  - Over-triage count    (routine expected but higher tier returned — allowed, printed)
+  - Tier agreement       (% of all scenarios where actual_tier == expected_tier)
+  - Service-type agreement
+  - Grounding failures
+
+Under-triage: actual tier is strictly LOWER than expected tier.
+  emergency expected → urgent or routine returned = under-triage
+  urgent expected    → routine returned           = under-triage
+
+Over-triage: actual tier is strictly HIGHER than expected tier.
+  routine expected   → urgent or emergency        = over-triage  (allowed, just reported)
 
 Run with:  pytest tests/test_benchmark.py -v -s
 """
@@ -27,6 +37,9 @@ from src.orchestrator import SessionResult, run_session  # noqa: E402
 
 _SCENARIOS_PATH = Path(__file__).parent.parent / "data" / "scenarios.json"
 
+# Tier severity order for under/over-triage comparison.
+_TIER_RANK = {"routine": 0, "urgent": 1, "emergency": 2}
+
 
 # ---------------------------------------------------------------------------
 # Load scenarios once
@@ -47,10 +60,12 @@ class ScenarioOutcome:
     expected_tier: str
     actual_tier: str
     expected_service_type: Optional[str]
-    actual_service_type: Optional[str]   # type of top non-fallback ranked result
+    actual_service_type: Optional[str]
     tier_match: bool
-    service_type_match: Optional[bool]   # None when expected_service_type is null
-    grounding_failure: bool              # needs_human_review is True
+    under_triage: bool   # actual tier is strictly lower than expected
+    over_triage: bool    # actual tier is strictly higher than expected (allowed)
+    service_type_match: Optional[bool]
+    grounding_failure: bool
     result: SessionResult
 
 
@@ -75,13 +90,19 @@ def _run_all_scenarios() -> list[ScenarioOutcome]:
         actual_type = _top_service_type(result)
         expected_type: Optional[str] = scn["expected_service_type"]
 
+        exp_rank = _TIER_RANK[scn["expected_tier"]]
+        act_rank = _TIER_RANK[result.tier]
+
         tier_match = result.tier == scn["expected_tier"]
+        under_triage = act_rank < exp_rank
+        over_triage  = act_rank > exp_rank
+
         if expected_type is not None and actual_type is not None:
             type_match: Optional[bool] = actual_type == expected_type
         elif expected_type is None:
-            type_match = None   # not assessed (e.g. emergency scenarios have null expected type)
+            type_match = None
         else:
-            type_match = False  # expected type exists but nothing was ranked
+            type_match = False
 
         outcomes.append(ScenarioOutcome(
             scenario_id=scn["id"],
@@ -91,6 +112,8 @@ def _run_all_scenarios() -> list[ScenarioOutcome]:
             expected_service_type=expected_type,
             actual_service_type=actual_type,
             tier_match=tier_match,
+            under_triage=under_triage,
+            over_triage=over_triage,
             service_type_match=type_match,
             grounding_failure=result.needs_human_review,
             result=result,
@@ -105,16 +128,22 @@ def _run_all_scenarios() -> list[ScenarioOutcome]:
 def _print_summary(outcomes: list[ScenarioOutcome]) -> dict:
     """Print a benchmark summary table and return a metrics dict."""
     emergency = [o for o in outcomes if o.expected_tier == "emergency"]
-    non_emergency = [o for o in outcomes if o.expected_tier != "emergency"]
+    urgent    = [o for o in outcomes if o.expected_tier == "urgent"]
     all_with_type = [o for o in outcomes if o.service_type_match is not None]
 
     emergency_correct = sum(1 for o in emergency if o.tier_match)
-    emergency_recall = emergency_correct / len(emergency) if emergency else 1.0
+    emergency_recall  = emergency_correct / len(emergency) if emergency else 1.0
 
-    tier_correct = sum(1 for o in outcomes if o.tier_match)
+    urgent_correct = sum(1 for o in urgent if not o.under_triage)
+    urgent_recall  = urgent_correct / len(urgent) if urgent else 1.0
+
+    under_triage_list = [o for o in outcomes if o.under_triage]
+    over_triage_list  = [o for o in outcomes if o.over_triage]
+
+    tier_correct   = sum(1 for o in outcomes if o.tier_match)
     tier_agreement = tier_correct / len(outcomes)
 
-    type_correct = sum(1 for o in all_with_type if o.service_type_match)
+    type_correct   = sum(1 for o in all_with_type if o.service_type_match)
     type_agreement = type_correct / len(all_with_type) if all_with_type else 1.0
 
     grounding_failures = [o for o in outcomes if o.grounding_failure]
@@ -134,15 +163,23 @@ def _print_summary(outcomes: list[ScenarioOutcome]) -> dict:
     print(sep)
 
     for o in outcomes:
-        tier_flag = "OK" if o.tier_match else "FAIL TIER"
-        type_flag = ""
+        if o.under_triage:
+            tier_flag = "UNDER-TRIAGE"
+        elif o.over_triage:
+            tier_flag = "over-triage"
+        elif o.tier_match:
+            tier_flag = "OK"
+        else:
+            tier_flag = "FAIL TIER"
+
         if o.service_type_match is False:
             type_flag = "FAIL TYPE"
         elif o.service_type_match is None:
             type_flag = "-"
         else:
             type_flag = "OK"
-        gnd_flag = " GROUNDING FAIL" if o.grounding_failure else ""
+
+        gnd_flag = " GROUNDING" if o.grounding_failure else ""
         notes = f"{tier_flag} | {type_flag}{gnd_flag}"
         print(col.format(
             o.scenario_id,
@@ -157,23 +194,45 @@ def _print_summary(outcomes: list[ScenarioOutcome]) -> dict:
     print(sep)
     print(f"Emergency recall:       {emergency_correct}/{len(emergency)} "
           f"({emergency_recall * 100:.0f}%)")
+    print(f"Urgent recall:          {urgent_correct}/{len(urgent)} "
+          f"({urgent_recall * 100:.0f}%)  [no under-triage allowed]")
+    print(f"Under-triage:           {len(under_triage_list)}/{len(outcomes)}  "
+          f"[MUST BE 0 — test fails if non-zero]")
+    print(f"Over-triage (allowed):  {len(over_triage_list)}/{len(outcomes)}  "
+          f"[routine raised to higher tier]")
     print(f"Tier agreement:         {tier_correct}/{len(outcomes)} "
           f"({tier_agreement * 100:.0f}%)")
     print(f"Service-type agreement: {type_correct}/{len(all_with_type)} "
           f"({type_agreement * 100:.0f}%)  [assessed: {len(all_with_type)} scenarios]")
     print(f"Grounding failures:     {len(grounding_failures)}/{len(outcomes)}")
+    if under_triage_list:
+        print("  UNDER-TRIAGE FAILURES:")
+        for o in under_triage_list:
+            print(f"    -> {o.scenario_id} ({o.label}): "
+                  f"expected {o.expected_tier}, got {o.actual_tier}")
+    if over_triage_list:
+        print("  Over-triage (info):")
+        for o in over_triage_list:
+            print(f"    -> {o.scenario_id} ({o.label}): "
+                  f"expected {o.expected_tier}, got {o.actual_tier}")
     if grounding_failures:
+        print("  Grounding failures:")
         for o in grounding_failures:
-            print(f"  -> {o.scenario_id} {o.label}")
+            print(f"    -> {o.scenario_id} {o.label}")
     print(sep + "\n")
 
     return {
         "emergency_recall": emergency_recall,
+        "urgent_recall": urgent_recall,
+        "under_triage_count": len(under_triage_list),
+        "over_triage_count": len(over_triage_list),
         "tier_agreement": tier_agreement,
         "type_agreement": type_agreement,
         "grounding_failure_count": len(grounding_failures),
         "emergency_correct": emergency_correct,
         "emergency_total": len(emergency),
+        "urgent_correct": urgent_correct,
+        "urgent_total": len(urgent),
         "tier_correct": tier_correct,
         "tier_total": len(outcomes),
         "type_correct": type_correct,
@@ -190,21 +249,54 @@ _METRICS: dict = _print_summary(_OUTCOMES)
 
 
 # ---------------------------------------------------------------------------
-# Hard requirement: emergency recall must be 100%
+# HARD REQUIREMENT: no under-triage
+# ---------------------------------------------------------------------------
+
+class TestUnderTriage:
+    """Any scenario classified at a lower tier than expected is a hard test failure."""
+
+    def test_no_under_triage(self) -> None:
+        """Zero under-triage across all scenarios — HARD FAIL if violated."""
+        under = [o for o in _OUTCOMES if o.under_triage]
+        assert under == [], (
+            f"{len(under)} scenario(s) were under-triaged:\n"
+            + "\n".join(
+                f"  {o.scenario_id} ({o.label}): "
+                f"expected {o.expected_tier!r}, got {o.actual_tier!r}"
+                for o in under
+            )
+        )
+
+    @pytest.mark.parametrize(
+        "outcome",
+        [o for o in _OUTCOMES if o.expected_tier in {"emergency", "urgent"}],
+        ids=[o.scenario_id for o in _OUTCOMES if o.expected_tier in {"emergency", "urgent"}],
+    )
+    def test_each_high_priority_scenario_not_under_triaged(
+        self, outcome: ScenarioOutcome
+    ) -> None:
+        """Each emergency/urgent scenario must not be classified at a lower tier."""
+        assert not outcome.under_triage, (
+            f"{outcome.scenario_id} ({outcome.label}): "
+            f"expected {outcome.expected_tier!r}, got {outcome.actual_tier!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# HARD REQUIREMENT: emergency recall = 100%
 # ---------------------------------------------------------------------------
 
 class TestEmergencyRecall:
-    """Emergency scenarios must NEVER be missed. This is a hard test failure."""
+    """Emergency scenarios must NEVER be missed."""
 
     def test_emergency_recall_is_100_percent(self) -> None:
-        """All emergency scenarios must return tier='emergency'."""
         missed = [
             o for o in _OUTCOMES
             if o.expected_tier == "emergency" and not o.tier_match
         ]
         assert missed == [], (
             f"{len(missed)} emergency scenario(s) were NOT detected as emergency:\n"
-            + "\n".join(f"  {o.scenario_id} ({o.label}): got tier={o.actual_tier!r}"
+            + "\n".join(f"  {o.scenario_id} ({o.label}): got {o.actual_tier!r}"
                         for o in missed)
         )
 
@@ -214,7 +306,6 @@ class TestEmergencyRecall:
         ids=[o.scenario_id for o in _OUTCOMES if o.expected_tier == "emergency"],
     )
     def test_each_emergency_scenario_detected(self, outcome: ScenarioOutcome) -> None:
-        """Each emergency scenario individually must return tier='emergency'."""
         assert outcome.tier_match, (
             f"{outcome.scenario_id} ({outcome.label}): "
             f"expected emergency, got {outcome.actual_tier!r}"
@@ -226,7 +317,6 @@ class TestEmergencyRecall:
         ids=[o.scenario_id for o in _OUTCOMES if o.expected_tier == "emergency"],
     )
     def test_emergency_skips_service_search(self, outcome: ScenarioOutcome) -> None:
-        """Emergency path must produce zero candidates and zero ranked results."""
         assert outcome.result.candidates == [], (
             f"{outcome.scenario_id}: expected no candidates on emergency path"
         )
@@ -236,24 +326,51 @@ class TestEmergencyRecall:
 
 
 # ---------------------------------------------------------------------------
-# Metrics summary tests (informational — do not gate on these)
+# Over-triage (informational — does NOT fail the test)
+# ---------------------------------------------------------------------------
+
+class TestOverTriage:
+    def test_over_triage_count_reported(self) -> None:
+        """Over-triage is allowed; this test always passes and documents the count."""
+        count = _METRICS["over_triage_count"]
+        # Always passes — over-triage is acceptable (safe-side).
+        assert isinstance(count, int)
+
+    def test_no_routine_scenario_returns_emergency(self) -> None:
+        """A routine scenario must never jump all the way to emergency tier."""
+        false_emergencies = [
+            o for o in _OUTCOMES
+            if o.expected_tier == "routine" and o.actual_tier == "emergency"
+        ]
+        assert false_emergencies == [], (
+            "Routine scenario(s) jumped to emergency: "
+            + ", ".join(o.scenario_id for o in false_emergencies)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Metrics / structural tests
 # ---------------------------------------------------------------------------
 
 class TestBenchmarkMetrics:
     def test_metrics_dict_has_expected_keys(self) -> None:
         required = {
-            "emergency_recall", "tier_agreement", "type_agreement",
-            "grounding_failure_count", "emergency_total",
+            "emergency_recall", "urgent_recall", "under_triage_count",
+            "over_triage_count", "tier_agreement", "type_agreement",
+            "grounding_failure_count", "emergency_total", "urgent_total",
         }
         assert required.issubset(_METRICS.keys())
 
     def test_emergency_total_is_four(self) -> None:
-        """scenarios.json has exactly 4 emergency scenarios."""
         assert _METRICS["emergency_total"] == 4
 
-    def test_tier_total_is_twelve(self) -> None:
-        """scenarios.json has exactly 12 scenarios in total."""
-        assert _METRICS["tier_total"] == 12
+    def test_urgent_total_is_nine(self) -> None:
+        """Original 4 urgent scenarios + 5 new ones = 9."""
+        assert _METRICS["urgent_total"] == 9
+
+    def test_tier_total_is_seventeen(self) -> None:
+        """4 emergency + 9 urgent + 4 routine = 17."""
+        assert _METRICS["tier_total"] == 17
 
     def test_all_scenarios_ran(self) -> None:
         assert len(_OUTCOMES) == len(_ALL_SCENARIOS)
@@ -271,9 +388,17 @@ class TestBenchmarkMetrics:
     def test_type_agreement_is_float(self) -> None:
         assert isinstance(_METRICS["type_agreement"], float)
 
+    def test_under_triage_count_is_zero(self) -> None:
+        """Mirrors the hard test above — under-triage count must be zero."""
+        assert _METRICS["under_triage_count"] == 0
+
     def test_non_emergency_scenarios_have_candidates_or_review(self) -> None:
-        """Non-emergency scenarios should either rank something or hit human review."""
-        non_em = [o for o in _OUTCOMES if o.expected_tier != "emergency"]
+        # Exclude scenarios that were over-triaged to emergency — those correctly
+        # follow the emergency path (no candidates by design).
+        non_em = [
+            o for o in _OUTCOMES
+            if o.expected_tier != "emergency" and o.actual_tier != "emergency"
+        ]
         for o in non_em:
             has_ranked = len(o.result.ranked) > 0
             assert has_ranked or o.grounding_failure, (
@@ -282,26 +407,15 @@ class TestBenchmarkMetrics:
 
 
 # ---------------------------------------------------------------------------
-# Tier-specific checks
+# Summary print captured in test output
 # ---------------------------------------------------------------------------
 
-class TestTierCoverage:
-    def test_no_routine_scenario_returns_emergency(self) -> None:
-        """A routine scenario must never escalate to emergency."""
-        false_emergencies = [
-            o for o in _OUTCOMES
-            if o.expected_tier == "routine" and o.actual_tier == "emergency"
-        ]
-        assert false_emergencies == [], (
-            "Routine scenario(s) incorrectly classified as emergency: "
-            + ", ".join(o.scenario_id for o in false_emergencies)
-        )
-
+class TestSummaryOutput:
     def test_summary_printed(self, capsys: pytest.CaptureFixture) -> None:
-        """Verify the summary was printed to stdout (captured by capsys)."""
-        # Re-print to ensure capsys captures it in this test's output.
         _print_summary(_OUTCOMES)
         captured = capsys.readouterr()
         assert "Emergency recall" in captured.out
-        assert "Tier agreement" in captured.out
+        assert "Urgent recall" in captured.out
+        assert "Under-triage" in captured.out
+        assert "Over-triage" in captured.out
         assert "Grounding failures" in captured.out
