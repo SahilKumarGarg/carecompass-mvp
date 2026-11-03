@@ -1,5 +1,6 @@
-streamlit
-pytest
-python-dotenv
-# Optional, only if you use watsonx.ai:
+streamlit==1.66.1
+pytest==9.1.1
+python-dotenv==1.2.4
+
+# Optional — only needed if you use the watsonx.ai integration:
 # ibm-watsonx-ai
