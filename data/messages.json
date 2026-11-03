@@ -5,7 +5,7 @@
     "emergency": {
       "id": "MSG_EMERGENCY",
       "tier": "emergency",
-      "heading": "This sounds like an emergency.",
+      "heading": "This is an emergency.",
       "body": "These symptoms need emergency help right now. Please call {emergency_number} immediately or ask someone nearby to call for you. Do not drive yourself. Stay on the line with the operator — they will tell you what to do while help is on the way.",
       "additional_note": "If calling is not possible, text {emergency_number} or ask anyone nearby to help.",
       "do_not_wait_reason": "Delaying emergency care can be life-threatening."
