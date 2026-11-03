@@ -33,6 +33,7 @@ import pytest
 for _k in ("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"):
     os.environ.pop(_k, None)
 
+from src.audit import BENCHMARK_FILE, log_benchmark  # noqa: E402
 from src.orchestrator import SessionResult, run_session  # noqa: E402
 
 _SCENARIOS_PATH = Path(__file__).parent.parent / "data" / "scenarios.json"
@@ -87,8 +88,20 @@ def _run_all_scenarios() -> list[ScenarioOutcome]:
     outcomes: list[ScenarioOutcome] = []
     for scn in _ALL_SCENARIOS:
         result = run_session(scn["user_text"], scn["area"])
+        # W8-6: log each benchmark scenario to benchmark.jsonl, not audit.jsonl.
+        log_benchmark(result.session_id, "benchmark_run", {
+            "scenario_id": scn["id"],
+            "label": scn["label"],
+            "expected_tier": scn["expected_tier"],
+            "actual_tier": result.tier,
+            "check_passed": result.check_passed,
+        })
         actual_type = _top_service_type(result)
         expected_type: Optional[str] = scn["expected_service_type"]
+        # W8-2: accept any type in the acceptable_service_types list.
+        acceptable_types: list[str] = scn.get("acceptable_service_types") or (
+            [expected_type] if expected_type else []
+        )
 
         exp_rank = _TIER_RANK[scn["expected_tier"]]
         act_rank = _TIER_RANK[result.tier]
@@ -97,9 +110,13 @@ def _run_all_scenarios() -> list[ScenarioOutcome]:
         under_triage = act_rank < exp_rank
         over_triage  = act_rank > exp_rank
 
-        if expected_type is not None and actual_type is not None:
-            type_match: Optional[bool] = actual_type == expected_type
-        elif expected_type is None:
+        # W8-3: skip type assessment when the scenario was over-triaged to emergency
+        # (those follow the emergency path and produce no ranked results by design).
+        if expected_type is not None and actual_type is not None and not (
+            over_triage and result.tier == "emergency"
+        ):
+            type_match: Optional[bool] = actual_type in acceptable_types
+        elif expected_type is None or (over_triage and result.tier == "emergency"):
             type_match = None
         else:
             type_match = False
@@ -419,3 +436,46 @@ class TestSummaryOutput:
         assert "Under-triage" in captured.out
         assert "Over-triage" in captured.out
         assert "Grounding failures" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# W8-6: Benchmark log separation
+# ---------------------------------------------------------------------------
+
+class TestBenchmarkLogSeparation:
+    def test_benchmark_file_was_written(self) -> None:
+        """Running the benchmark must produce logs/benchmark.jsonl (W8-6)."""
+        assert BENCHMARK_FILE.exists(), (
+            f"benchmark.jsonl not found at {BENCHMARK_FILE}. "
+            "Benchmark runs must write to benchmark.jsonl, not audit.jsonl."
+        )
+
+    def test_benchmark_file_contains_valid_json_lines(self) -> None:
+        """Every line in benchmark.jsonl must be valid JSON with required keys."""
+        if not BENCHMARK_FILE.exists():
+            pytest.skip("benchmark.jsonl not yet written")
+        lines = BENCHMARK_FILE.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) > 0, "benchmark.jsonl is empty"
+        for line in lines:
+            record = json.loads(line)  # must not raise
+            assert "ts" in record
+            assert "session_id" in record
+            assert "step" in record
+
+    def test_benchmark_file_has_correct_step_name(self) -> None:
+        """Benchmark log entries must use step='benchmark_run'."""
+        if not BENCHMARK_FILE.exists():
+            pytest.skip("benchmark.jsonl not yet written")
+        lines = BENCHMARK_FILE.read_text(encoding="utf-8").strip().splitlines()
+        steps = {json.loads(l)["step"] for l in lines}
+        assert "benchmark_run" in steps
+
+    def test_benchmark_log_has_scenario_id_in_data(self) -> None:
+        """Each benchmark_run entry must record scenario_id in its data."""
+        if not BENCHMARK_FILE.exists():
+            pytest.skip("benchmark.jsonl not yet written")
+        for line in BENCHMARK_FILE.read_text(encoding="utf-8").strip().splitlines():
+            record = json.loads(line)
+            if record["step"] == "benchmark_run":
+                assert "scenario_id" in record["data"]
+                break

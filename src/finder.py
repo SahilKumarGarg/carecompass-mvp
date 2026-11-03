@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.intake import CaseResult
+from src.safety import RuleHit
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -22,6 +23,7 @@ _DATA = Path(__file__).parent.parent / "data"
 _SERVICES_PATH = _DATA / "services.json"
 _CARE_LEVELS_PATH = _DATA / "care_levels.json"
 _AREA_CENTRES_PATH = _DATA / "area_centres.json"
+_RED_FLAGS_PATH = _DATA / "red_flags.json"
 
 # Travel speed used for time estimate (labelled as estimate throughout).
 _TRAVEL_SPEED_KMH = 25.0
@@ -58,6 +60,7 @@ class ServiceCandidate:
 _services_cache: list[dict] | None = None
 _care_levels_cache: list[dict] | None = None
 _area_centres_cache: dict[str, dict] | None = None
+_red_flags_cache: dict[str, dict] | None = None
 
 
 def _load_services() -> list[dict]:
@@ -84,6 +87,16 @@ def _load_area_centres() -> dict[str, dict]:
     return _area_centres_cache
 
 
+def _load_red_flags_index() -> dict[str, dict]:
+    """Return a dict keyed by rule ID containing the full rule record."""
+    global _red_flags_cache
+    if _red_flags_cache is None:
+        with _RED_FLAGS_PATH.open(encoding="utf-8") as fh:
+            rules = json.load(fh)["red_flag_categories"]
+        _red_flags_cache = {r["id"]: r for r in rules}
+    return _red_flags_cache
+
+
 # ---------------------------------------------------------------------------
 # Haversine distance
 # ---------------------------------------------------------------------------
@@ -102,21 +115,40 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 # Care-level mapping
 # ---------------------------------------------------------------------------
 
-def map_to_service_types(case: CaseResult, tier: str) -> list[str]:
+def map_to_service_types(
+    case: CaseResult,
+    tier: str,
+    safety_hits: list[RuleHit] | None = None,
+) -> list[str]:
     """Return an ordered list of preferred service types for this case.
 
-    Urgent and emergency tiers always include hospital_emergency first.
+    When safety_hits are provided and an urgent rule carries a service_type hint,
+    that type is promoted to the front of the list ahead of keyword-based matches.
+    Emergency tier always returns ["hospital_emergency"] only.
     Falls back to ["primary_care", "telemedicine"] if no keyword match.
 
     Args:
         case: Structured case from intake.
         tier: Safety tier ("emergency" | "urgent" | "routine").
+        safety_hits: Optional list of RuleHit from check_red_flags; used to
+            pull the service_type hint from the matched rule.
 
     Returns:
         Ordered list of service type strings.
     """
     if tier == "emergency":
         return ["hospital_emergency"]
+
+    # W8-1: derive a rule-level service_type hint from the highest-priority hit.
+    rule_type: str | None = None
+    if safety_hits:
+        rf_index = _load_red_flags_index()
+        for hit in safety_hits:
+            rule = rf_index.get(hit.rule_id, {})
+            hint = rule.get("service_type")
+            if hint:
+                rule_type = hint
+                break  # highest-priority hit wins
 
     care_levels = _load_care_levels()
     concern_lower = (case.concern + " " + case.who).lower()
@@ -130,14 +162,18 @@ def map_to_service_types(case: CaseResult, tier: str) -> list[str]:
                         matched.append(t)
                 break  # one keyword match per care level is enough
 
-    # Urgent tier: hospital_emergency bumped to front if not already there.
-    if tier == "urgent" and matched:
-        if "hospital_emergency" not in matched:
-            matched.insert(0, "hospital_emergency")
-        else:
-            # Ensure hospital_emergency is first
-            matched.remove("hospital_emergency")
-            matched.insert(0, "hospital_emergency")
+    # Urgent tier: put the rule-derived type at the front if present,
+    # then hospital_emergency, then keyword matches.
+    if tier == "urgent":
+        front: list[str] = []
+        if rule_type and rule_type not in front:
+            front.append(rule_type)
+        if "hospital_emergency" not in front:
+            front.append("hospital_emergency")
+        for t in matched:
+            if t not in front:
+                front.append(t)
+        matched = front
 
     if not matched:
         if tier == "urgent":
@@ -160,7 +196,11 @@ def _fit_score(service_type: str, preferred_types: list[str]) -> int:
         return 0
 
 
-def find_services(case: CaseResult, tier: str) -> list[ServiceCandidate]:
+def find_services(
+    case: CaseResult,
+    tier: str,
+    safety_hits: list[RuleHit] | None = None,
+) -> list[ServiceCandidate]:
     """Find services matching the case area and preferred service types.
 
     Filters data/services.json by area, then by whether the service type
@@ -171,11 +211,13 @@ def find_services(case: CaseResult, tier: str) -> list[ServiceCandidate]:
     Args:
         case: Structured case from intake.
         tier: Safety tier ("emergency" | "urgent" | "routine").
+        safety_hits: Optional list of RuleHit; used to pick service type
+            from the matched rule (W8-1).
 
     Returns:
         List of ServiceCandidate, unsorted (sorting is done by advisor).
     """
-    preferred_types = map_to_service_types(case, tier)
+    preferred_types = map_to_service_types(case, tier, safety_hits)
     services = _load_services()
     centres = _load_area_centres()
 

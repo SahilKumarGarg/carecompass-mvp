@@ -374,9 +374,12 @@ class TestVerbatimConcern:
         assert "6-year-old" not in result.concern
         assert "daughter" not in result.concern.lower()
 
-    def test_concern_does_not_contain_duration(self) -> None:
+    def test_concern_contains_duration_words(self) -> None:
+        # W8-5: duration words are now kept in the concern to preserve the user's
+        # own phrasing.  The concern must contain the full description.
         result = _call("I have had a rash for three days.")
-        assert "three days" not in result.concern.lower()
+        assert "rash" in result.concern.lower()
+        assert "three days" in result.concern.lower()
 
     def test_who_age_with_relation_full_form(self) -> None:
         assert _extract_who_offline("My 6-year-old daughter has a cough.") == "my 6-year-old daughter"

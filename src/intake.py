@@ -189,15 +189,17 @@ def _extract_severity_cues_offline(text: str) -> list[str]:
 def _extract_concern_offline(text: str) -> str:
     """Return the user's own words as the concern.
 
-    Strategy: strip the who-description and duration from the original text,
-    then return what remains (up to ~120 chars), trimmed of leading connectives.
+    W8-5: keep as much of the user's original phrasing as possible.
+    Strategy: strip only the leading who-phrase and its connective; keep the
+    rest verbatim (including duration words — they're useful context).
     Falls back to the full text trimmed if stripping leaves nothing.
     """
     working = text.strip()
 
-    # Remove who phrase (e.g. "My 6-year-old daughter", "My mum").
+    # Remove who phrase only at the start of the sentence (or after "I" subjects).
+    # e.g. "My 6-year-old daughter has been crying..." → "has been crying..."
     working = re.sub(
-        r"(?:my\s+(?:\d+[- ]year[- ]old\s+)?(?:" + _RELATION_WORDS + r")|"
+        r"^(?:my\s+(?:\d+[- ]year[- ]old\s+)?(?:" + _RELATION_WORDS + r")|"
         r"my\s+\d+[- ]year[- ]old|"
         r"(?:for |about )?a \d+[- ]year[- ]old)\b",
         "",
@@ -208,15 +210,13 @@ def _extract_concern_offline(text: str) -> str:
     # Remove leading connective words left by the strip.
     working = re.sub(r"^[\s,;.]*(?:has|have|is|was|had|and|but|who|with)\b[\s,;.]*", "", working, flags=re.I)
 
-    # Remove duration phrase.
-    working = _DURATION_RE.sub("", working)
+    # Clean up leading punctuation / whitespace only.
+    working = working.strip(" .,;")
+    working = re.sub(r"\s{2,}", " ", working)
 
-    # Clean up punctuation runs and extra whitespace.
-    working = re.sub(r"\s{2,}", " ", working).strip(" .,;")
-
-    # Return up to 120 chars of what's left, else fall back to full text.
-    result = working[:120].strip(" .,;")
-    return result if result else text[:120].strip()
+    # Return up to 200 chars (W8-5: longer budget to preserve user's words).
+    result = working[:200].strip(" .,;")
+    return result if result else text[:200].strip()
 
 
 def _extract_denied_symptoms_offline(text: str) -> list[str]:

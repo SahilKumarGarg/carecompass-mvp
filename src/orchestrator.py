@@ -235,7 +235,7 @@ def run_session(
         )
 
     # ── Step 4: find ──────────────────────────────────────────────────────
-    candidates = find_services(case, safety_result.tier)
+    candidates = find_services(case, safety_result.tier, safety_result.hits)
     audit.log(sid, "find", {
         "tier": safety_result.tier,
         "candidate_count": len(candidates),

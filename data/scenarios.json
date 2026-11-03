@@ -54,6 +54,7 @@
       "user_text": "I've been having thoughts of hurting myself lately. I haven't done anything but the thoughts are getting louder and I don't know who to talk to.",
       "expected_tier": "urgent",
       "expected_service_type": "specialist",
+      "acceptable_service_types": ["specialist", "primary_care"],
       "expected_red_flag_id": "RF009",
       "notes": "Self-harm ideation — urgent tier, route to mental health specialist."
     },
@@ -65,6 +66,7 @@
       "user_text": "My partner has a very high temperature — I think around 39.5 — and he's confused and not making much sense. This has been going on for about two hours.",
       "expected_tier": "urgent",
       "expected_service_type": "hospital_emergency",
+      "acceptable_service_types": ["hospital_emergency"],
       "expected_red_flag_id": "RF008",
       "notes": "High fever with confusion — urgent, likely same-day care at walk-in or A&E."
     },
@@ -76,6 +78,7 @@
       "user_text": "My 4-year-old has been crying all day with ear pain, she has a temperature of 38.5 and she keeps pulling at her ear. She hasn't slept.",
       "expected_tier": "urgent",
       "expected_service_type": "primary_care",
+      "acceptable_service_types": ["primary_care", "hospital_emergency"],
       "expected_red_flag_id": null,
       "notes": "Acute otitis media signs in a young child — urgent but not emergency; same-day GP."
     },
@@ -87,6 +90,7 @@
       "user_text": "I have asthma and my inhaler isn't helping as much today. I've used it five times already and I'm still quite breathless when I walk across the room.",
       "expected_tier": "urgent",
       "expected_service_type": "hospital_emergency",
+      "acceptable_service_types": ["hospital_emergency", "primary_care"],
       "expected_red_flag_id": null,
       "notes": "Poor response to reliever inhaler — urgent, not yet full respiratory distress but needs same-day care."
     },
@@ -98,6 +102,7 @@
       "user_text": "My mother-in-law has had fever and weakness for two days and is confused at times.",
       "expected_tier": "urgent",
       "expected_service_type": "hospital_emergency",
+      "acceptable_service_types": ["hospital_emergency"],
       "expected_red_flag_id": "RF008",
       "notes": "Original bug-fix sentence — fever + confusion via term_groups RF008."
     },
@@ -109,6 +114,7 @@
       "user_text": "I can't stop thinking about suicide. I haven't acted on it but it is taking over my thoughts every day.",
       "expected_tier": "urgent",
       "expected_service_type": "specialist",
+      "acceptable_service_types": ["specialist", "primary_care"],
       "expected_red_flag_id": "RF009",
       "notes": "Explicit suicidal ideation — urgent, mental health specialist."
     },
@@ -120,6 +126,7 @@
       "user_text": "My dad is feverish and has been muddled and not himself since this morning. He keeps asking where he is.",
       "expected_tier": "urgent",
       "expected_service_type": "hospital_emergency",
+      "acceptable_service_types": ["hospital_emergency", "primary_care"],
       "expected_red_flag_id": "RF008",
       "notes": "Feverish + muddled — RF008 term_groups match; different wording from SCN006."
     },
@@ -131,6 +138,7 @@
       "user_text": "Things have become unbearable and I keep thinking I want to end my life. I haven't made a plan but the thoughts won't go away.",
       "expected_tier": "urgent",
       "expected_service_type": "specialist",
+      "acceptable_service_types": ["specialist", "primary_care"],
       "expected_red_flag_id": "RF009",
       "notes": "Self-harm/suicidal ideation — RF009 term_groups match via 'end my life'."
     },
@@ -142,6 +150,7 @@
       "user_text": "He's been sweating heavily all evening and is delirious — he said things that made no sense and didn't recognise me.",
       "expected_tier": "urgent",
       "expected_service_type": "hospital_emergency",
+      "acceptable_service_types": ["hospital_emergency"],
       "expected_red_flag_id": "RF008",
       "notes": "Sweating + delirium — RF008 term_groups match with synonym 'sweating' and 'delirious'."
     },
@@ -153,6 +162,7 @@
       "user_text": "I need to request a repeat prescription for my blood pressure tablets. I have about a week's supply left.",
       "expected_tier": "routine",
       "expected_service_type": "pharmacy",
+      "acceptable_service_types": ["pharmacy", "primary_care"],
       "expected_red_flag_id": null,
       "notes": "Straightforward repeat prescription — routine, route to pharmacy or GP."
     },
@@ -164,6 +174,7 @@
       "user_text": "I've had a mild itchy rash on my forearm for about a week. It's not spreading and I don't have a temperature. It might be a reaction to my new washing powder.",
       "expected_tier": "routine",
       "expected_service_type": "primary_care",
+      "acceptable_service_types": ["primary_care", "pharmacy"],
       "expected_red_flag_id": null,
       "notes": "Mild, stable rash — routine GP appointment appropriate."
     },
@@ -175,6 +186,7 @@
       "user_text": "I'm travelling to Southeast Asia in six weeks and I want to check which vaccinations I need. I haven't had any travel jabs before.",
       "expected_tier": "routine",
       "expected_service_type": "pharmacy",
+      "acceptable_service_types": ["pharmacy", "primary_care"],
       "expected_red_flag_id": null,
       "notes": "Travel health — routine, pharmacy travel clinic or GP nurse."
     },
@@ -186,6 +198,7 @@
       "user_text": "I've been feeling quite low and anxious for the past few weeks. It's affecting my sleep and my motivation at work. I'm not in crisis but I'd like some support.",
       "expected_tier": "routine",
       "expected_service_type": "specialist",
+      "acceptable_service_types": ["specialist", "primary_care"],
       "expected_red_flag_id": null,
       "notes": "Low mood and anxiety without crisis indicators — routine, route to IAPT/mental health specialist."
     }

@@ -222,6 +222,7 @@
       "id": "RF008",
       "name": "confusion_with_fever",
       "tier": "urgent",
+      "service_type": "hospital_emergency",
       "description": "High fever with altered mental state — possible serious infection",
       "phrases": [
         "very high temperature and confused",
@@ -258,6 +259,7 @@
       "id": "RF009",
       "name": "self_harm_thoughts",
       "tier": "urgent",
+      "service_type": "specialist",
       "description": "Expressions of self-harm or suicidal ideation",
       "phrases": [
         "want to hurt myself",
@@ -324,6 +326,7 @@
       "id": "RF011",
       "name": "fever_in_child",
       "tier": "urgent",
+      "service_type": "primary_care",
       "description": "High fever in an infant or young child — possible serious paediatric infection",
       "phrases": [
         "temperature of 38",
