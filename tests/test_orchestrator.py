@@ -342,3 +342,140 @@ class TestEmergencyConfig:
         import re as _re
         bare = _re.sub(_re.escape(_DEMO_EMERGENCY_NUMBER), "", result.answer_text)
         assert "999" not in bare
+
+
+# ---------------------------------------------------------------------------
+# needs_human_review path — urgent/emergency vs routine branching
+# ---------------------------------------------------------------------------
+
+class TestNeedsHumanReviewBranching:
+    """Verify that persistent final_check failure shows the right message per tier."""
+
+    def _always_fail(self):
+        """Return a CheckResult factory that always reports a failure."""
+        from src.checks import CheckResult
+        def _fail(*args, **kwargs):
+            return CheckResult(passed=False, problems=["forced failure for test"])
+        return _fail
+
+    def test_urgent_review_shows_tier_badge(self, monkeypatch) -> None:
+        """When final_check always fails on an urgent session, the answer must contain [URGENT]."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run(
+            "I've been having thoughts of hurting myself lately.",
+            area="Northgate",
+        )
+        if result.tier == "urgent":
+            assert result.needs_human_review is True
+            assert "[URGENT]" in result.answer_text
+
+    def test_urgent_review_shows_emergency_number(self, monkeypatch) -> None:
+        """Urgent review path must include the emergency number."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run(
+            "I've been having thoughts of hurting myself lately.",
+            area="Northgate",
+        )
+        if result.tier == "urgent" and result.needs_human_review:
+            assert _DEMO_EMERGENCY_NUMBER in result.answer_text
+
+    def test_urgent_review_says_do_not_wait(self, monkeypatch) -> None:
+        """Urgent review path must contain 'Do not wait'."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run(
+            "I've been having thoughts of hurting myself lately.",
+            area="Northgate",
+        )
+        if result.tier == "urgent" and result.needs_human_review:
+            assert "do not wait" in result.answer_text.lower()
+
+    def test_urgent_review_offers_handoff(self, monkeypatch) -> None:
+        """Urgent review path must mention the handoff summary offer."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run(
+            "I've been having thoughts of hurting myself lately.",
+            area="Northgate",
+        )
+        if result.tier == "urgent" and result.needs_human_review:
+            lower = result.answer_text.lower()
+            assert "summary" in lower or "share" in lower or "professional" in lower
+
+    def test_urgent_review_shows_rule_reason(self, monkeypatch) -> None:
+        """Urgent review must include at least one rule hit name (badge reason)."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run(
+            "I've been having thoughts of hurting myself lately.",
+            area="Northgate",
+        )
+        if result.tier == "urgent" and result.needs_human_review:
+            # RF009 fires here; name is "self_harm_thoughts" → displayed as "self harm thoughts"
+            assert "self harm thoughts" in result.answer_text.lower()
+
+    def test_urgent_review_does_not_show_generic_heading(self, monkeypatch) -> None:
+        """Urgent review must NOT show the routine 'We could not confirm a match.' heading."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run(
+            "I've been having thoughts of hurting myself lately.",
+            area="Northgate",
+        )
+        if result.tier == "urgent" and result.needs_human_review:
+            assert "we could not confirm a match" not in result.answer_text.lower()
+
+    def test_routine_review_shows_generic_heading(self, monkeypatch) -> None:
+        """When final_check always fails on a routine session, the generic heading appears."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run(
+            "I need to request a repeat prescription.",
+            area="Westbury",
+        )
+        if result.tier == "routine" and result.needs_human_review:
+            assert "we could not confirm a match" in result.answer_text.lower()
+
+    def test_routine_review_does_not_show_tier_badge(self, monkeypatch) -> None:
+        """Routine review must NOT show an [URGENT] or [EMERGENCY] badge."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run(
+            "I need to request a repeat prescription.",
+            area="Westbury",
+        )
+        if result.tier == "routine" and result.needs_human_review:
+            assert "[URGENT]" not in result.answer_text
+            assert "[EMERGENCY]" not in result.answer_text
+
+    def test_needs_review_true_when_always_failing(self, monkeypatch) -> None:
+        """Patching final_check to always fail must produce needs_human_review=True."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run("I need a repeat prescription.", area="Greenfield")
+        assert result.needs_human_review is True
+
+    def test_check_passed_false_when_always_failing(self, monkeypatch) -> None:
+        """When final_check always fails, check_passed must be False."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        result = _run("I need a repeat prescription.", area="Greenfield")
+        assert result.check_passed is False
+
+    def test_urgent_review_emergency_number_configurable(self, monkeypatch) -> None:
+        """The emergency number in the urgent review path respects EMERGENCY_NUMBER env var."""
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        monkeypatch.setenv("EMERGENCY_NUMBER", "112")
+        result = _run(
+            "My partner has a very high temperature and is confused.",
+            area="Eastfield",
+        )
+        if result.tier in ("urgent", "emergency") and result.needs_human_review:
+            assert "112" in result.answer_text
+
+    def test_no_hits_urgent_review_shows_fallback_reason(self, monkeypatch) -> None:
+        """When hits list is empty on an urgent review, fallback reason text is shown."""
+        from src.checks import CheckResult
+        from src.safety import SafetyResult
+
+        monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
+        # Force check_red_flags to return urgent with no hits.
+        monkeypatch.setattr(
+            "src.orchestrator.check_red_flags",
+            lambda _text: SafetyResult(tier="urgent", hits=[]),
+        )
+        result = _run("Some vague concern.", area="Greenfield")
+        if result.needs_human_review:
+            assert "symptoms described" in result.answer_text.lower()

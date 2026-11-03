@@ -6,22 +6,29 @@
       "id": "MSG_EMERGENCY",
       "tier": "emergency",
       "heading": "This sounds like an emergency.",
-      "body": "Based on what you have described, you need emergency help right now. Please call {emergency_number} immediately or ask someone nearby to call for you. Do not drive yourself. Stay on the line with the operator — they will tell you what to do while help is on the way.",
-      "additional_note": "If you cannot call, text {emergency_number} or ask anyone nearby to help you.",
+      "body": "These symptoms need emergency help right now. Please call {emergency_number} immediately or ask someone nearby to call for you. Do not drive yourself. Stay on the line with the operator — they will tell you what to do while help is on the way.",
+      "additional_note": "If calling is not possible, text {emergency_number} or ask anyone nearby to help.",
       "do_not_wait_reason": "Delaying emergency care can be life-threatening."
     },
     "urgent": {
       "id": "MSG_URGENT",
       "tier": "urgent",
-      "heading": "You should be seen today.",
-      "body": "What you have described needs attention today. Please contact an urgent care centre, your GP surgery for a same-day appointment, or call {emergency_number} if things get worse quickly. Do not wait more than a few hours.",
-      "escalation_prompt": "If you feel significantly worse, or develop any of the following — difficulty breathing, chest pain, loss of consciousness — call {emergency_number} ({emergency_region}) straight away."
+      "heading": "These symptoms need attention today.",
+      "body": "The symptoms described need attention today. Please contact an urgent care centre, a GP surgery for a same-day appointment, or call {emergency_number} ({emergency_region}) if symptoms get worse quickly. Do not wait more than a few hours.",
+      "escalation_prompt": "If symptoms get significantly worse, or any of the following appear — difficulty breathing, chest pain, loss of consciousness — call {emergency_number} ({emergency_region}) straight away."
     },
     "needs_human_review": {
       "id": "MSG_REVIEW",
       "tier": null,
       "heading": "We could not confirm a match.",
       "body": "We were not able to find a service we are confident is right for your situation after checking twice. Please call your GP surgery or dial {emergency_number} if you are worried. A person can help you better here."
+    },
+    "needs_human_review_urgent": {
+      "id": "MSG_REVIEW_URGENT",
+      "tier": "urgent",
+      "heading": "This looks urgent.",
+      "body": "Please get medical care now: call {emergency_number} or go to the nearest emergency department. Do not wait.",
+      "handoff_prompt": "Would you like a summary of this conversation to share with a healthcare professional?"
     },
     "handoff_intro": {
       "id": "MSG_HANDOFF_INTRO",

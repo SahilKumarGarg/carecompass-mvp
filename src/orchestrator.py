@@ -280,12 +280,28 @@ def run_session(
 
     if needs_review:
         messages = _load_messages()
-        review_msg = messages["needs_human_review"]
-        answer_text = (
-            f"**{review_msg['heading']}**\n\n"
-            + _fill_placeholders(review_msg["body"])
-        )
-        audit.log(sid, "needs_human_review", {})
+        if safety_result.tier in ("urgent", "emergency"):
+            review_msg = messages["needs_human_review_urgent"]
+            # Tier badge: capitalise the tier name for display.
+            tier_label = safety_result.tier.upper()
+            # Reason: the name of each rule hit, or a generic fallback.
+            if safety_result.hits:
+                reason_parts = ", ".join(h.name.replace("_", " ") for h in safety_result.hits)
+            else:
+                reason_parts = "symptoms described"
+            handoff_line = _fill_placeholders(review_msg["handoff_prompt"])
+            answer_text = (
+                f"**[{tier_label}]** {reason_parts.capitalize()}.\n\n"
+                + _fill_placeholders(review_msg["body"])
+                + f"\n\n{handoff_line}"
+            )
+        else:
+            review_msg = messages["needs_human_review"]
+            answer_text = (
+                f"**{review_msg['heading']}**\n\n"
+                + _fill_placeholders(review_msg["body"])
+            )
+        audit.log(sid, "needs_human_review", {"tier": safety_result.tier})
 
     # ── Step 7: present ───────────────────────────────────────────────────
     audit.log(sid, "present", {"answer_preview": answer_text[:200]})
