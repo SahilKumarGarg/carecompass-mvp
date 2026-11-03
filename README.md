@@ -1,140 +1,109 @@
 # CareCompass MVP
 
 CareCompass is a healthcare navigation assistant built for the IBM SkillsBuild programme.
-A user describes a health concern in chat, picks their area, and the app works out
-how urgent the situation is, finds matching local services from a demo directory, and
-gives one clear next step — including a phone number and the date the data was last
-verified.
+A user describes a health concern in plain language, picks their area from a dropdown, and
+the app determines how urgent the situation is, finds matching local services from a demo
+directory, and gives one clear next step — including a phone number and the date the service
+record was last verified.
 
-**It does not diagnose. It does not suggest medicines or treatments. It directs people
-to the right service.**
+**It does not diagnose. It does not suggest medicines or treatments. It directs people to
+the right service.**
 
-> ⚠ All data in this repository is entirely synthetic demo data. Nothing here is
-> medical advice. Never use this application for real clinical decisions.
+> ⚠ All data in this repository is entirely synthetic demo data. Nothing here is medical
+> advice. Never use this application for real clinical decisions.
 
 ---
 
-## Install and run
+## Quick start
 
-**Requirements:** Python 3.11 or newer.
+**Requires Python 3.11 or newer.**
 
-```bash
+```powershell
 # 1. Create and activate a virtual environment
 python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
 
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Copy the environment file and optionally fill in watsonx.ai credentials
-#    (leaving them blank runs the fully offline fallback)
-cp .env.example .env
+# 3. Copy the env file (leaving values blank uses the fully offline fallback)
+copy .env.example .env
 
-# 4. Start the app
+# 4. Launch the app
 streamlit run app.py
 ```
 
-The app opens in your browser at `http://localhost:8501`.
+The app opens at `http://localhost:8501`.
 
-### Optional: watsonx.ai integration
+### Optional: watsonx.ai
 
-Open `.env` and set `WATSONX_API_KEY`, `WATSONX_URL`, and `WATSONX_PROJECT_ID`.
-When these are present the intake step uses the Granite model to extract structured
-fields from the user's message, and the advisor uses it to reword recommendation
-reasons. **Every step has an offline fallback — watsonx.ai is never required.**
+Set `WATSONX_API_KEY`, `WATSONX_URL`, and `WATSONX_PROJECT_ID` in `.env`.
+When present the intake step uses **ibm/granite-13b-instruct-v2** for structured field
+extraction, and the advisor uses it to reword service recommendation reasons.
+**Every LLM step has an offline fallback — watsonx.ai is never required.**
 
-Set `EMERGENCY_NUMBER` to the local emergency phone number shown in the emergency
-message (defaults to `999` if unset).
+Set `EMERGENCY_NUMBER` to the local emergency number shown in emergency messages (default
+demo value: `[DEMO-999]`). Set `EMERGENCY_REGION` for the region label (default: `DEMO REGION`).
 
 ---
 
-## Run the tests
+## Running the tests
 
-```bash
-# All tests
-pytest
+```powershell
+# Full suite (647 tests, ~3.7 s, fully offline)
+.venv\Scripts\pytest.exe tests/ -v --tb=short
 
-# Single file
-pytest tests/test_safety.py
+# Single test file
+.venv\Scripts\pytest.exe tests/test_safety.py -v
 
-# Single test function
-pytest tests/test_safety.py::test_emergency_scenarios_return_emergency_tier
+# Single test by name
+.venv\Scripts\pytest.exe tests/test_safety.py -k "test_empty_string_returns_routine"
 
-# Benchmark (prints a summary table, run with -s to see output)
-pytest tests/test_benchmark.py -v -s
+# Benchmark with printed summary table
+.venv\Scripts\pytest.exe tests/test_benchmark.py -v -s
 ```
 
-The test suite runs fully offline with no credentials needed (209 tests, ~0.7 s).
+> **Note:** always run pytest via `.venv\Scripts\pytest.exe` from the project root.
+> Plain `pytest` fails with `No module named src` because `conftest.py` adds `src/` to
+> `sys.path` only through the project-root `conftest.py`.
+
+The test suite is fully offline — no credentials, no network — and covers:
+
+| File | Tests | What it covers |
+|---|---|---|
+| `test_safety.py` | 56 | Red-flag rule matching across all scenarios |
+| `test_safety_v2.py` | 44 | Term-group paraphrases, negation, edge cases |
+| `test_benchmark.py` | 83 | End-to-end pipeline over all 47 scenarios |
+| `test_safety_proof.py` | 140 | Consent gate, offline emergency, red-team cases |
+| `test_banned_phrases.py` | 38 | Blocked/safe sentences, SCN005–SCN017 answers |
+| `test_orchestrator.py` | 64 | Session schema, all paths, audit log, config |
+| `test_checks.py` | 34 | Each final_check sub-check independently |
+| `test_finder.py` | 24 | Haversine, service filtering, distance |
+| `test_advisor.py` | 58 | Scoring functions, ranking, reason builder |
+| `test_intake.py` | 66 | Offline field extraction, follow-up questions |
 
 ---
 
-## The 8-step flow
+## The 8-step pipeline
 
-Each user turn passes through a fixed pipeline. Every step and decision is written
-to `logs/audit.jsonl`.
+Each user turn passes through a fixed pipeline. Every step and its outcome is appended to
+`logs/audit.jsonl` as a JSON line.
 
-| Step | Name | What happens |
-|------|------|--------------|
+```
+describe → understand → safety → find → compare → final_check → present → handoff
+```
+
+| # | Step | What happens |
+|---|---|---|
 | 1 | **Describe** | User types a concern and picks an area from the dropdown. |
-| 2 | **Understand** | Intake extracts who the concern is about, the concern itself, duration, and severity cues. Up to 2 follow-up questions are asked when fields are missing. |
-| 3 | **Safety check** | Red-flag rules (plain Python, no LLM) scan the text for emergency and urgent phrases. Highest tier wins. **Emergency: show the verbatim emergency message, skip steps 4–7.** |
-| 4 | **Find** | The case maps to preferred service types via a keyword table. Services in the chosen area are filtered from `data/services.json`. Straight-line distance is estimated from the area centre. |
-| 5 | **Compare** | Candidates are scored on type fit, distance, open status, and data freshness. Urgent cases weight distance and open status more heavily. Top 3 + a fallback are selected. |
-| 6 | **Final check** | Every service ID, name, and phone in the answer is verified against `data/services.json`. Banned diagnosis and treatment phrases are checked. The last-verified date must appear. Urgent answers must contain urgent-action language. On failure the answer is revised and re-checked — at most 2 retries. |
-| 7 | **Present** | The recommendation is shown: service card, distance estimate (labelled as estimate), opening hours, phone, last-verified date, and reason. |
-| 8 | **Handoff** | Only after the user clicks **Yes**, a short plain-text summary is created to share with a healthcare professional. Clicking **No** creates nothing. |
-
----
-
-## All data is synthetic
-
-| File | Contents |
-|------|----------|
-| `data/services.json` | 20 synthetic services across 5 demo areas. All names, phone numbers, and addresses are invented. |
-| `data/red_flags.json` | 10 demo red-flag categories with trigger phrases and urgency tiers. |
-| `data/messages.json` | Verbatim emergency, urgent, and review messages shown to the user. |
-| `data/scenarios.json` | 12 test scenarios (4 emergency, 4 urgent, 4 routine) with expected outcomes. |
-| `data/care_levels.json` | Keyword → service-type mapping used by the finder. |
-| `data/area_centres.json` | Approximate centre coordinates per area for distance estimation. |
-| `data/banned_phrases.json` | Phrases the app must never produce (diagnosis and treatment language). |
-
-Every data file carries `"demo_data": true`. No real patient data is used anywhere.
-
----
-
-## Known limits of this MVP
-
-- **Offline tier detection is keyword-only.** The safety check catches emergency and
-  urgent phrases exactly as written. Indirect or ambiguous descriptions of urgent
-  conditions (e.g. "my asthma inhaler isn't working") are not escalated to urgent
-  without the watsonx.ai intake step.
-
-- **Open-hours parsing is not implemented.** The ranking scores a service as 0.5
-  ("not 24h") regardless of whether it is open right now. A Mon–Fri GP practice
-  scores the same on Saturday as on Tuesday.
-
-- **Distance is from the area centre, not the user's location.** All services in
-  the same area are within a few hundred metres of each other in the demo data,
-  so distance contributes little to ranking between same-area candidates.
-
-- **Follow-up questions are generated but not yet displayed in the UI.** The
-  orchestrator detects missing intake fields and produces a follow-up question,
-  but `app.py` does not currently surface it before running the pipeline.
-
-- **The LLM reword path (`guardrails=False`) is not independently validated.**
-  The final check catches banned phrases in the full answer text, but only after
-  the reworded reason is already stored. The banned-phrase list also has gaps
-  for interpretive language ("this suggests", "consistent with").
-
-- **The final-check revision is cosmetic.** On a failed check the orchestrator
-  appends a disclaimer and retries. This fixes the urgent-advice check but not
-  structural problems like a missing phone number or date.
-
-- **5 demo areas only.** Greenfield, Riverside, Northgate, Eastfield, Westbury —
-  all synthetic. An unknown area returns no candidates.
+| 2 | **Understand** | Intake extracts who the concern is about, the concern, duration, and severity cues. Up to 2 follow-up questions are asked when fields are missing. |
+| 3 | **Safety check** | Deterministic red-flag rules (pure Python, no LLM) scan the text using phrase lists and negation-aware synonym groups. Highest tier wins. **Emergency exits here with no service search and no LLM call.** |
+| 4 | **Find** | The case maps to preferred service types. Services in the chosen area are loaded from `data/services.json`. Straight-line distance is estimated from the area centre using the Haversine formula. |
+| 5 | **Compare** | Candidates are scored on type fit, distance, 24-hour availability, and data freshness. Urgent cases weight distance and availability more heavily. Top 3 recommendations plus one fallback are selected. |
+| 6 | **Final check** | Every service ID, name, and phone in the answer is verified against `data/services.json`. Banned diagnosis/treatment phrases are scanned. The last-verified date must appear. Urgent answers must contain urgent-action language. On failure the answer is revised and re-checked — at most 2 retries, then a human-review notice is shown. |
+| 7 | **Present** | The recommendation is displayed: service card, distance estimate, opening hours, phone, last-verified date, and reason. |
+| 8 | **Handoff** | Only after the user clicks **Yes**, a short plain-text summary is created. Clicking **No** creates nothing. No summary is ever produced without explicit user consent. |
 
 ---
 
@@ -142,20 +111,78 @@ Every data file carries `"demo_data": true`. No real patient data is used anywhe
 
 ```
 carecompass-mvp/
-├── app.py                  Streamlit UI
+├── app.py                  Streamlit chat UI (areas: Greenfield, Riverside, Northgate,
+│                               Eastfield, Westbury)
 ├── requirements.txt
-├── .env.example
-├── data/                   Synthetic demo data (JSON)
+├── .env.example            Template for WATSONX_* and EMERGENCY_* env vars
+├── conftest.py             Adds src/ to sys.path for pytest
+├── AGENTS.md               Agent-mode coding rules
+│
+├── data/                   Synthetic demo data (all carry "demo_data": true)
+│   ├── services.json       20 services across 5 demo areas
+│   ├── red_flags.json      11 red-flag rules (RF001–RF011)
+│   ├── messages.json       Verbatim emergency/urgent/review messages
+│   ├── scenarios.json      47 test scenarios (16 emergency, 17 urgent, 14 routine)
+│   ├── banned_phrases.json Diagnosis and treatment phrases the app must never produce
+│   ├── care_levels.json    Keyword → service-type preference mapping
+│   └── area_centres.json   Approximate centre coordinates per area
+│
 ├── src/
-│   ├── safety.py           Red-flag phrase matching (no LLM)
-│   ├── intake.py           Case extraction (offline + optional watsonx.ai)
+│   ├── safety.py           Red-flag phrase matching — deterministic, no LLM
+│   ├── intake.py           Case extraction — offline + optional watsonx.ai
 │   ├── finder.py           Service filtering and distance estimation
-│   ├── advisor.py          Ranking and reason building
-│   ├── checks.py           Final-check validation
-│   ├── orchestrator.py     8-step state machine
-│   └── audit.py            Audit log writer
-├── tests/                  pytest test suite (209 tests)
+│   ├── advisor.py          Scoring, ranking, and reason building
+│   ├── checks.py           Final-check validation (6 sub-checks)
+│   ├── orchestrator.py     8-step state machine; emergency exit; consent gate
+│   └── audit.py            JSONL audit log writer (logs/audit.jsonl)
+│
+├── tests/                  pytest suite (647 tests, fully offline)
 ├── docs/
-│   └── SPEC.md             Full technical specification
-└── logs/                   audit.jsonl written here at runtime (not committed)
+│   ├── SPEC.md             Original technical specification
+│   ├── USER_GUIDE.md       End-user walkthrough
+│   ├── ARCHITECTURE.md     Component design and data flows
+│   └── GOVERNANCE.md       Safety rules, consent gate, banned phrases, testing strategy
+└── logs/                   audit.jsonl and benchmark.jsonl written here at runtime
 ```
+
+---
+
+## Data files
+
+| File | Contents |
+|---|---|
+| `data/services.json` | 20 synthetic services (4 per area). Types: `pharmacy`, `primary_care`, `hospital_emergency`, `specialist`, `telemedicine`. All names, phones, and addresses are invented. |
+| `data/red_flags.json` | 11 red-flag rules (RF001–RF011). 8 emergency, 3 urgent. Each rule has `phrases` (substring match) and/or `term_groups` (conjunction of synonym groups, negation-aware). |
+| `data/messages.json` | Verbatim messages for emergency, urgent, needs-human-review, and handoff prompts. `{emergency_number}` and `{emergency_region}` are replaced at runtime. |
+| `data/scenarios.json` | 47 test scenarios with `expected_tier`, `expected_red_flag_id`, and `acceptable_service_types`. Used by the benchmark. |
+| `data/banned_phrases.json` | 3 categories (BP001 diagnosis, BP002 treatment/dosage, BP003 condition naming). `final_check` blocks any answer containing these phrases. |
+| `data/care_levels.json` | Keyword → preferred service types list, used by `finder.map_to_service_types()`. |
+| `data/area_centres.json` | Lat/lon centre of each demo area, used for Haversine distance estimation. |
+
+Every data file carries `"demo_data": true`. No real patient data is used anywhere.
+
+---
+
+## Known limits of this MVP
+
+- **Safety detection is keyword-based.** Indirect descriptions of urgent conditions (e.g.
+  "my asthma inhaler stopped working") may not escalate without the watsonx.ai intake step.
+- **Open-hours are not parsed in real time.** A service not marked `open_24h` scores 0.5
+  regardless of whether it is actually open right now.
+- **Distance is from the area centre, not the user's exact location.** All five demo areas
+  use synthetic coordinates; distances are plausible but not real.
+- **Follow-up questions are generated but not yet surfaced in the UI.** The orchestrator
+  detects missing fields and produces a question, but `app.py` does not display it before
+  running the pipeline.
+- **The final-check revision is cosmetic.** Appending a disclaimer and retrying passes the
+  urgent-advice check but does not fix structural problems such as a missing phone number.
+- **Five demo areas only.** An unknown area name returns no candidates.
+
+---
+
+## Docs
+
+- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — step-by-step guide for end users
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — component design, scoring weights, data flows
+- [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) — safety rules, consent gate, banned phrases, testing
+- [`docs/SPEC.md`](docs/SPEC.md) — original technical specification
