@@ -22,7 +22,7 @@
       "cost_note": "NHS prescriptions at standard charge; private prescriptions charged",
       "phone": "[DEMO-0101]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-18"
+      "last_verified": "2026-10-12"
     },
     {
       "id": "SVC002",
@@ -46,7 +46,7 @@
       "cost_note": "NHS registered patients only",
       "phone": "[DEMO-0102]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-05"
+      "last_verified": "2026-10-20"
     },
     {
       "id": "SVC003",
@@ -69,7 +69,7 @@
       "cost_note": "Free at point of use (NHS)",
       "phone": "[DEMO-0103]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-27"
     },
     {
       "id": "SVC004",
@@ -91,7 +91,7 @@
       "cost_note": "NHS referral required",
       "phone": "[DEMO-0104]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-09-27"
+      "last_verified": "2026-10-04"
     },
     {
       "id": "SVC005",
@@ -114,7 +114,7 @@
       "cost_note": "£25 per consultation; NHS referrals accepted",
       "phone": "[DEMO-0105]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-09-26"
+      "last_verified": "2026-10-08"
     },
     {
       "id": "SVC006",
@@ -137,7 +137,7 @@
       "cost_note": "NHS prescriptions at standard charge",
       "phone": "[DEMO-0201]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-09-26"
+      "last_verified": "2026-10-27"
     },
     {
       "id": "SVC007",
@@ -162,7 +162,7 @@
       "cost_note": "NHS registered patients only",
       "phone": "[DEMO-0202]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-04"
     },
     {
       "id": "SVC008",
@@ -185,7 +185,7 @@
       "cost_note": "Free at point of use (NHS)",
       "phone": "[DEMO-0203]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-24"
+      "last_verified": "2026-10-18"
     },
     {
       "id": "SVC009",
@@ -231,7 +231,7 @@
       "cost_note": "Free with NHS referral; £20 self-pay",
       "phone": "[DEMO-0205]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-08"
+      "last_verified": "2026-10-27"
     },
     {
       "id": "SVC011",
@@ -254,7 +254,7 @@
       "cost_note": "NHS prescriptions at standard charge",
       "phone": "[DEMO-0301]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-09-25"
+      "last_verified": "2026-10-14"
     },
     {
       "id": "SVC012",
@@ -278,7 +278,7 @@
       "cost_note": "NHS registered patients only",
       "phone": "[DEMO-0302]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-12"
+      "last_verified": "2026-10-17"
     },
     {
       "id": "SVC013",
@@ -300,7 +300,7 @@
       "cost_note": "Free at point of use (NHS)",
       "phone": "[DEMO-0303]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-19"
+      "last_verified": "2026-10-20"
     },
     {
       "id": "SVC014",
@@ -322,7 +322,7 @@
       "cost_note": "NHS referral required; self-referral to IAPT available",
       "phone": "[DEMO-0304]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-18"
+      "last_verified": "2026-11-02"
     },
     {
       "id": "SVC015",
@@ -344,7 +344,7 @@
       "cost_note": "£30 per consultation",
       "phone": "[DEMO-0305]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-02"
+      "last_verified": "2026-10-26"
     },
     {
       "id": "SVC016",
@@ -366,7 +366,7 @@
       "cost_note": "NHS prescriptions at standard charge",
       "phone": "[DEMO-0401]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-09-24"
+      "last_verified": "2026-10-24"
     },
     {
       "id": "SVC017",
@@ -390,7 +390,7 @@
       "cost_note": "NHS registered patients only",
       "phone": "[DEMO-0402]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-21"
+      "last_verified": "2026-10-29"
     },
     {
       "id": "SVC018",
@@ -413,7 +413,7 @@
       "cost_note": "Free at point of use (NHS)",
       "phone": "[DEMO-0403]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-10"
+      "last_verified": "2026-10-15"
     },
     {
       "id": "SVC019",
@@ -436,7 +436,7 @@
       "cost_note": "NHS prescriptions at standard charge",
       "phone": "[DEMO-0501]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-13"
+      "last_verified": "2026-10-12"
     },
     {
       "id": "SVC020",
@@ -461,7 +461,7 @@
       "cost_note": "NHS registered patients only",
       "phone": "[DEMO-0502]",
       "source": "demo_directory_v1",
-      "last_verified": "2026-10-23"
+      "last_verified": "2026-10-13"
     }
   ]
 }
