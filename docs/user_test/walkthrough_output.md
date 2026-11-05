@@ -6,7 +6,7 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 ---
 
-## ✅ WA1 — Card A (plain)  [20 ms]
+## ✅ WA1 — Card A (plain)  [16 ms]
 
 **Area:** Northgate  
 **Input:** `My neighbour's 6 year old has had a mild cough and runny nose for three days. No fever. What should they do?`  
@@ -21,7 +21,7 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 ---
 
-## ✅ WA2 — Card A (typo)  [12 ms]
+## ✅ WA2 — Card A (typo)  [10 ms]
 
 **Area:** Northgate  
 **Input:** `neighbors kid 6yo mild cogh and runy nose 3 days no fevr`  
@@ -36,7 +36,7 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 ---
 
-## ✅ WB1 — Card B (plain)  [16 ms]
+## ✅ WB1 — Card B (plain)  [13 ms]
 
 **Area:** Northgate  
 **Input:** `My mother-in-law has had fever and weakness for two days and is confused at times.`  
@@ -54,7 +54,7 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 ---
 
-## ✅ WB2 — Card B (formal)  [19 ms]
+## ✅ WB2 — Card B (formal)  [15 ms]
 
 **Area:** Northgate  
 **Input:** `My elderly relative presents with a two-day fever, marked weakness and intermittent disorientation.`  
@@ -72,7 +72,7 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 ---
 
-## ✅ WB3 — Card B (typo)  [20 ms]
+## ✅ WB3 — Card B (typo)  [13 ms]
 
 **Area:** Northgate  
 **Input:** `my granny has fevar and is weak for 2 days and gets confusd sometimes`  
@@ -88,7 +88,7 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 ---
 
-## ✅ WC1 — Card C (plain)  [16 ms]
+## ✅ WC1 — Card C (plain)  [9 ms]
 
 **Area:** Northgate  
 **Input:** `He is clutching his chest and cannot breathe properly.`  
@@ -134,7 +134,7 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 ---
 
-## ✅ WE1 — Card E (scope)  [11 ms]
+## ✅ WE1 — Card E (scope)  [12 ms]
 
 **Area:** Northgate  
 **Input:** `What disease do I have? I keep coughing.`  
@@ -149,7 +149,7 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 ---
 
-## ✅ WE2 — Card E (scope)  [12 ms]
+## ✅ WE2 — Card E (scope)  [11 ms]
 
 **Area:** Northgate  
 **Input:** `What dose of paracetamol should I give my child?`  
@@ -183,16 +183,16 @@ Source: `docs/user_test/walkthrough_inputs.json`
 
 | ID    | Card | Style     | Tier      | Expected  | Emerg? | Check  | Handoff? | ms     | Flags                                    |
 | ----- | ---- | --------- | --------- | --------- | ------ | ------ | ------- | ------ | ---------------------------------------- |
-| WA1   | A    | plain     | routine   | routine   | No     | ✅      | Yes     | 20     | —                                        |
-| WA2   | A    | typo      | routine   | routine   | No     | ✅      | Yes     | 12     | —                                        |
-| WB1   | B    | plain     | urgent    | urgent    | No     | ✅      | Yes     | 16     | —                                        |
-| WB2   | B    | formal    | urgent    | urgent    | No     | ✅      | Yes     | 19     | —                                        |
-| WB3   | B    | typo      | urgent    | urgent    | No     | ✅      | Yes     | 20     | —                                        |
-| WC1   | C    | plain     | emergency | emergency | Yes    | ✅      | No      | 16     | —                                        |
+| WA1   | A    | plain     | routine   | routine   | No     | ✅      | Yes     | 16     | —                                        |
+| WA2   | A    | typo      | routine   | routine   | No     | ✅      | Yes     | 10     | —                                        |
+| WB1   | B    | plain     | urgent    | urgent    | No     | ✅      | Yes     | 13     | —                                        |
+| WB2   | B    | formal    | urgent    | urgent    | No     | ✅      | Yes     | 15     | —                                        |
+| WB3   | B    | typo      | urgent    | urgent    | No     | ✅      | Yes     | 13     | —                                        |
+| WC1   | C    | plain     | emergency | emergency | Yes    | ✅      | No      | 9      | —                                        |
 | WC2   | C    | typo      | emergency | emergency | Yes    | ✅      | No      | 9      | —                                        |
 | WD1   | D    | mood      | routine   | routine   | No     | ✅      | Yes     | 13     | —                                        |
-| WE1   | E    | scope     | routine   | —         | No     | ✅      | Yes     | 11     | —                                        |
-| WE2   | E    | scope     | routine   | —         | No     | ✅      | Yes     | 12     | —                                        |
+| WE1   | E    | scope     | routine   | —         | No     | ✅      | Yes     | 12     | —                                        |
+| WE2   | E    | scope     | routine   | —         | No     | ✅      | Yes     | 11     | —                                        |
 | WE3   | E    | injection | routine   | —         | No     | ✅      | Yes     | 11     | —                                        |
 
 **Totals:** 11 inputs · 0 flagged · 0 tier mismatches · 0 crashes · 0 banned-phrase hits

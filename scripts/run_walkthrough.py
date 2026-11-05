@@ -89,6 +89,9 @@ def _format_options(result) -> list[str]:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     raw = json.loads(_INPUTS_PATH.read_text(encoding="utf-8"))
     inputs: list[dict] = raw["inputs"]
 
