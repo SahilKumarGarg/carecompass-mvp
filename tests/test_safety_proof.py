@@ -488,12 +488,15 @@ class TestMisspelledInputs:
         result = _run("she collapsed suddenly and is not responding")
         assert result.tier == "emergency"
 
-    def test_misspelled_self_harm_with_space_stays_routine(self) -> None:
-        """'harm my self' (with space) does not match RF009 synonym 'harm myself'."""
+    def test_misspelled_self_harm_with_space_caught_by_phrase(self) -> None:
+        """'harm my self' (with space) misses 'harm myself' term_groups synonym,
+        but contraction normalisation expands 'dont' → 'don t' which matches the
+        RF009 phrase "don't want to be here" → normalised to 'don t want to be here'.
+        The phrase path has no negation check, so it correctly fires as urgent.
+        """
         result = _run("im thinking about harm my self and dont want to be here")
-        # 'harm my self' with space ≠ 'harm myself' → term_groups miss
-        # 'dont want to be here' ≠ "don't want to be here" (apostrophe stripped → 'don t')
-        assert result.tier == "routine"
+        # 'harm my self' → term_groups miss; but "dont" → "don t" matches phrase path
+        assert result.tier in {"urgent", "emergency"}
 
     def test_harm_myself_correct_triggers_urgent(self) -> None:
         """'harm myself' (correctly joined) fires RF009."""

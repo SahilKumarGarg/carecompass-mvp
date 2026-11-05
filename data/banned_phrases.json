@@ -5,7 +5,7 @@
     {
       "id": "BP001",
       "category": "diagnosis",
-      "note": "Whole-phrase, case-insensitive matches. Avoid broad fragments like 'you have' that can appear in safe template text.",
+      "note": "Whole-phrase, case-insensitive matches. Use specific multi-word diagnosis patterns — never bare 'you have' which appears in safe advisory text.",
       "phrases": [
         "you probably have",
         "you likely have",
@@ -28,11 +28,8 @@
         "symptoms of cancer",
         "this could be cancer",
         "you may have diabetes",
-        "you have a heart condition",
-        "you have an infection",
-        "you have appendicitis",
-        "you have pneumonia",
-        "you have a stroke"
+        "your diagnosis is",
+        "this is a diagnosis"
       ]
     },
     {
@@ -81,6 +78,51 @@
         "hypoglycaemia",
         "anaphylaxis",
         "ectopic pregnancy"
+      ]
+    },
+    {
+      "id": "BP004",
+      "category": "diagnosis_direct",
+      "note": "Whole-phrase 'you have <condition>' and 'you've got <condition>' patterns. Specific enough to avoid blocking safe advisory sentences like 'if you have chest pain'.",
+      "phrases": [
+        "you have an infection",
+        "you have a stroke",
+        "you have a heart condition",
+        "you have heart disease",
+        "you have diabetes",
+        "you have type 1 diabetes",
+        "you have type 2 diabetes",
+        "you have asthma",
+        "you have cancer",
+        "you have flu",
+        "you have covid",
+        "you have a cold",
+        "you have a virus",
+        "you have a bacterial infection",
+        "you have a viral infection",
+        "you have a chest infection",
+        "you have a kidney infection",
+        "you have a urinary infection",
+        "you have a blood clot",
+        "you have a fracture",
+        "you have a broken bone",
+        "you have a tumour",
+        "you have a tumor",
+        "you have high blood pressure",
+        "you have low blood pressure",
+        "you have high cholesterol",
+        "you've got an infection",
+        "you've got a stroke",
+        "you've got a heart condition",
+        "you've got diabetes",
+        "you've got asthma",
+        "you've got cancer",
+        "you've got flu",
+        "you've got covid",
+        "you've got a virus",
+        "you've got a bacterial infection",
+        "you've got a chest infection",
+        "you've got high blood pressure"
       ]
     }
   ]

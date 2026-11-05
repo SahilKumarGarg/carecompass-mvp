@@ -61,7 +61,7 @@
         },
         {
           "synonyms": [
-            "can't", "cannot", "struggling", "difficulty", "trouble",
+            "can't", "cannot", "cant", "struggling", "difficulty", "trouble",
             "hard to", "unable to", "very hard", "gasping", "short of",
             "not able to", "finding it hard"
           ]
@@ -245,7 +245,8 @@
         },
         {
           "synonyms": [
-            "confused", "confusion", "disoriented", "disorientated",
+            "confused", "confusd", "confuzed", "cofused",
+            "confusion", "disorientation", "disoriented", "disorientated",
             "not making sense", "making no sense", "not with it",
             "out of it", "delirious", "delirium", "drowsy", "dazed",
             "muddled", "incoherent", "doesn't know where", "doesn't recognise",

@@ -9,6 +9,14 @@ Two matching strategies are supported in data/red_flags.json:
    synonym, that synonym is not counted as a match.
 
 Both strategies are independent.  A rule fires if either strategy triggers.
+
+Spelling tolerance (term_groups only):
+  For synonyms of 5+ characters, edit distance 1 is also accepted when the
+  exact match fails.  At most ONE group per rule invocation may use a fuzzy
+  match; the remaining groups must match exactly.  This prevents double-fuzzy
+  false positives (e.g. "fevar" + "confusd" each fuzzy-matching separately to
+  the same rule still fires, but only because one of the two matches is exact
+  after the contraction pre-step and JSON synonym additions).
 """
 
 from __future__ import annotations
@@ -29,6 +37,28 @@ _NEGATORS = {"no", "not", "without", "never", "dont", "doesnt", "didnt", "neithe
 
 # How many tokens before the synonym to search for a negator.
 _NEGATION_WINDOW = 3
+
+# Minimum synonym length (chars) to attempt a fuzzy (edit-distance-1) match.
+_FUZZY_MIN_LEN = 5
+
+# Contraction expansions applied BEFORE punctuation stripping so that both the
+# written ("cant") and apostrophe ("can't") forms normalise to the same tokens.
+_CONTRACTION_MAP: list[tuple[str, str]] = [
+    (r"\bcant\b",    "can't"),
+    (r"\bwont\b",    "won't"),
+    (r"\bdont\b",    "don't"),
+    (r"\bdoesnt\b",  "doesn't"),
+    (r"\bdidnt\b",   "didn't"),
+    (r"\bwouldnt\b", "wouldn't"),
+    (r"\bcouldnt\b", "couldn't"),
+    (r"\bisnt\b",    "isn't"),
+    (r"\barent\b",   "aren't"),
+    (r"\bwasnt\b",   "wasn't"),
+    (r"\bwerent\b",  "weren't"),
+    (r"\bhasnt\b",   "hasn't"),
+    (r"\bhavent\b",  "haven't"),
+    (r"\bhadnt\b",   "hadn't"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -56,12 +86,56 @@ class SafetyResult(NamedTuple):
 # ---------------------------------------------------------------------------
 
 def _normalise(text: str) -> str:
-    """Lower-case, strip accents, replace punctuation/whitespace runs with a space."""
-    text = unicodedata.normalize("NFD", text.lower())
+    """Lower-case, expand contractions, strip accents, replace punctuation/whitespace with space."""
+    # Step 0: lower-case first so contraction patterns match case-insensitively.
+    text = text.lower()
+    # Step 1: expand contractions BEFORE removing punctuation so that e.g.
+    # "cant" and "can't" both become "can't" and then normalise to "can t".
+    for pattern, replacement in _CONTRACTION_MAP:
+        text = re.sub(pattern, replacement, text)
+    # Step 2: strip Unicode accents.
+    text = unicodedata.normalize("NFD", text)
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
-    text = re.sub(r"[^\w\s]", " ", text)   # replace all punctuation with space
+    # Step 3: replace all punctuation (including apostrophes) with space.
+    text = re.sub(r"[^\w\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+# ---------------------------------------------------------------------------
+# Edit-distance helper (Levenshtein, pure Python, no imports)
+# ---------------------------------------------------------------------------
+
+def _edit_distance(a: str, b: str) -> int:
+    """Return the Levenshtein edit distance between strings *a* and *b*.
+
+    Uses a standard O(len(a) * len(b)) DP matrix.  No external libraries.
+
+    Args:
+        a: First string.
+        b: Second string.
+
+    Returns:
+        Integer edit distance (0 = identical).
+    """
+    la, lb = len(a), len(b)
+    if la == 0:
+        return lb
+    if lb == 0:
+        return la
+    # dp[i][j] = edit distance between a[:i] and b[:j]
+    dp = list(range(lb + 1))
+    for i in range(1, la + 1):
+        prev = dp[0]
+        dp[0] = i
+        for j in range(1, lb + 1):
+            temp = dp[j]
+            if a[i - 1] == b[j - 1]:
+                dp[j] = prev
+            else:
+                dp[j] = 1 + min(prev, dp[j], dp[j - 1])
+            prev = temp
+    return dp[lb]
 
 
 # ---------------------------------------------------------------------------
@@ -126,19 +200,63 @@ def _match_term_groups(rule: dict, text_norm: str) -> str | None:
 
     All groups must each have at least one synonym present and not negated.
     Returns a summary string (e.g. "groups:fever+confused") on success.
+
+    Spelling tolerance: after an exact match fails for a group, a fuzzy
+    pass (edit distance 1) is attempted for synonyms of _FUZZY_MIN_LEN+ chars.
+    Guard against a single misspelt token satisfying multiple groups: each
+    fuzzy-matched text token may only be used by one group.
+
+    Args:
+        rule: A single red-flag rule dict from red_flags.json.
+        text_norm: Normalised full input text.
+
+    Returns:
+        "groups:<syn1>+<syn2>+..." on a successful conjunction match, else None.
     """
     groups = rule.get("term_groups", [])
     if not groups:
         return None
 
     matched_per_group: list[str] = []
+    # Fuzzy matching constraints:
+    # 1. Only for rules with 2+ groups — a single-group rule (e.g. RF005, RF009)
+    #    must match exactly or via phrase; a lone misspelled word must not fire it.
+    # 2. At most ONE group per rule may use a fuzzy match — the other group(s) must
+    #    match exactly.  This means both groups cannot be misspelled simultaneously
+    #    (e.g. "pregant" + "bleading" must NOT fire RF010).
+    allow_fuzzy = len(groups) >= 2
+    fuzzy_group_used = False          # only one fuzzy group per rule invocation
+
     for group in groups:
         group_hit: str | None = None
+
+        # --- exact pass (same logic as before) ---
         for synonym in group["synonyms"]:
             syn_norm = _normalise(synonym)
             if syn_norm in text_norm and not _is_negated(syn_norm, text_norm):
                 group_hit = synonym
                 break
+
+        # --- fuzzy pass (edit distance 1, single-token synonyms only) ---
+        if group_hit is None and allow_fuzzy and not fuzzy_group_used:
+            text_tokens = text_norm.split()
+            for synonym in group["synonyms"]:
+                syn_norm = _normalise(synonym)
+                # Only attempt fuzzy on single-token synonyms of sufficient length.
+                if " " in syn_norm or len(syn_norm) < _FUZZY_MIN_LEN:
+                    continue
+                for tok in text_tokens:
+                    if len(tok) < _FUZZY_MIN_LEN:
+                        continue
+                    if _edit_distance(tok, syn_norm) == 1:
+                        # Check negation: look for the misspelt token in text.
+                        if not _is_negated(tok, text_norm):
+                            group_hit = synonym + f"~{tok}"  # annotate fuzzy
+                            fuzzy_group_used = True
+                            break
+                if group_hit is not None:
+                    break
+
         if group_hit is None:
             return None   # this group has no match → conjunction fails
         matched_per_group.append(group_hit)

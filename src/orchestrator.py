@@ -103,6 +103,7 @@ def _build_answer_text(ranked: list[RankedResult], tier: str) -> str:
         urgent_msg = messages["urgent"]
         lines.append(urgent_msg["heading"])
         lines.append(_fill_placeholders(urgent_msg["body"]))
+        lines.append(_fill_placeholders(urgent_msg["escalation_prompt"]))
         lines.append("")
 
     for r in top:

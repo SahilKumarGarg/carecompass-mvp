@@ -14,8 +14,8 @@
       "id": "MSG_URGENT",
       "tier": "urgent",
       "heading": "These symptoms need attention today.",
-      "body": "The symptoms described need attention today. Please contact an urgent care centre, a GP surgery for a same-day appointment, or call {emergency_number} ({emergency_region}) if symptoms get worse quickly. Do not wait more than a few hours.",
-      "escalation_prompt": "If symptoms get significantly worse, or any of the following appear — difficulty breathing, chest pain, loss of consciousness — call {emergency_number} ({emergency_region}) straight away."
+      "body": "The symptoms described need attention today. Please contact an urgent care centre, a GP surgery for a same-day appointment, or call {emergency_number} ({emergency_region}) if symptoms worsen quickly. Do not wait more than a few hours.",
+      "escalation_prompt": "If symptoms get significantly worse, or if any of the following appear — difficulty breathing, chest pain, loss of consciousness — call {emergency_number} ({emergency_region}) straight away."
     },
     "needs_human_review": {
       "id": "MSG_REVIEW",
