@@ -1,13 +1,14 @@
 """CareCompass MVP — Streamlit chat application.
 
 Run with:  streamlit run app.py
-
-All data is synthetic demo data. This app does not provide medical advice.
 """
 
 from __future__ import annotations
 
+import base64
+import json
 import os
+from pathlib import Path
 import urllib.parse
 
 import streamlit as st
@@ -19,9 +20,28 @@ from src.locations import list_states, list_counties, list_cities
 # Page config — sidebar collapsed, toolbar minimal (also in config.toml)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Logo — prefer assets/logo.png, fall back to assets/logo.svg
+# ---------------------------------------------------------------------------
+
+_ASSETS = Path(__file__).parent / "assets"
+_LOGO_PNG = _ASSETS / "logo.png"
+_LOGO_SVG = _ASSETS / "logo.svg"
+
+
+def _logo_page_icon() -> str:
+    """Return a data-URI string suitable for page_icon, or the compass emoji."""
+    for path in (_LOGO_PNG, _LOGO_SVG):
+        if path.exists():
+            mime = "image/png" if path.suffix == ".png" else "image/svg+xml"
+            data = base64.b64encode(path.read_bytes()).decode()
+            return f"data:{mime};base64,{data}"
+    return "🧭"
+
+
 st.set_page_config(
-    page_title="CareCompass (Demo)",
-    page_icon="🧭",
+    page_title="CareCompass",
+    page_icon=_logo_page_icon(),
     layout="centered",
     initial_sidebar_state="collapsed",
 )
@@ -299,74 +319,121 @@ def _render_tier_banner(result: SessionResult) -> None:
         st.info(f"{badge_md}  \n{why}" if why else badge_md)
 
 
-def _render_recommendation_card(result: SessionResult) -> None:
-    """Display the top recommendation as a styled card (non-emergency/urgent)."""
-    # hospitals_us path: ranked holds RankedHospital objects.
-    # demo path: ranked holds RankedResult objects.
+def _render_hospital_card(r: object, *, top: bool) -> None:
+    """Render one hospital result as a structured card.
+
+    Args:
+        r:   A RankedHospital instance.
+        top: True for the primary (larger) card, False for secondary cards.
+    """
+    h = r.hospital  # type: ignore[attr-defined]
+
+    name        = h.display_name or h.name.title()
+    heading_tag = "###" if top else "####"
+
+    with st.container(border=True):
+        label = name
+        if r.is_fallback:  # type: ignore[attr-defined]
+            label += " *(alternative option)*"
+        st.markdown(f"{heading_tag} {label}")
+
+        # ── Distance and drive time ────────────────────────────────────
+        if h.distance_miles is not None:
+            drive = (
+                f"  · ~{h.travel_min_estimate:.0f} min drive (estimate, 40 mph)"
+                if h.travel_min_estimate is not None
+                else ""
+            )
+            st.markdown(f"📍 **~{h.distance_miles:.1f} miles away**{drive}")
+
+        # ── Phone as a clickable tel: link ─────────────────────────────
+        if h.phone:
+            phone_digits = "".join(ch for ch in h.phone if ch.isdigit())
+            st.markdown(f"📞 [**{h.phone}**](tel:{phone_digits})")
+
+        # ── Address ────────────────────────────────────────────────────
+        addr_parts = [p for p in (h.address, h.city, h.state, h.zip) if p]
+        if addr_parts:
+            st.markdown("🏥 " + ", ".join(addr_parts))
+
+        # ── Type, trauma, beds ─────────────────────────────────────────
+        meta: list[str] = [h.type.replace("_", " ").title()]
+        if h.trauma:
+            meta.append(f"Trauma: {h.trauma}")
+        if h.beds:
+            meta.append(f"{h.beds} beds")
+        st.markdown("  ·  ".join(meta))
+
+        # ── Validation notice ──────────────────────────────────────────
+        val_text = f"Record validated {h.val_year} — " if h.val_year else ""
+        st.caption(f"{val_text}call ahead to confirm.")
+
+        # ── Details expander: ID only ──────────────────────────────────
+        with st.expander("Details", expanded=False):
+            st.caption(f"Dataset ID: {h.id}")
+
+
+def _render_hospital_cards(result: SessionResult) -> None:
+    """Render the hospitals_us ranked results as structured cards.
+
+    Shows the routine advisory in an info box above the cards, then one
+    large card for the top result and smaller cards for the rest.
+    """
+    from src.advisor import _ROUTINE_ADVISORY  # import here to keep function self-contained
+
+    if not result.ranked:
+        return
+
+    # Routine advisory box — shown once above all cards.
+    if result.tier == "routine":
+        st.info(_ROUTINE_ADVISORY)
+
+    top_list    = [r for r in result.ranked if not r.is_fallback]
+    others_list = [r for r in result.ranked if r.is_fallback]
+
+    if top_list:
+        _render_hospital_card(top_list[0], top=True)
+    for r in top_list[1:]:
+        _render_hospital_card(r, top=False)
+    for r in others_list:
+        _render_hospital_card(r, top=False)
+
+
+def _render_demo_card(result: SessionResult) -> None:
+    """Display the top demo-path recommendation as a styled card."""
     top = [r for r in result.ranked if not r.is_fallback]
     if not top:
         return
     best = top[0]
-    # Support both RankedHospital (.hospital) and RankedResult (.service).
-    svc = getattr(best, "hospital", None) or getattr(best, "service", None)
+    svc = getattr(best, "service", None)
     if svc is None:
         return
 
     with st.container(border=True):
-        name = getattr(svc, "display_name", None) or getattr(svc, "name", "")
-        st.markdown(f"### {name}")
+        st.markdown(f"### {svc.name}")
         col1, col2 = st.columns(2)
         with col1:
             st.markdown(f"**Type:** {svc.type.replace('_', ' ').title()}")
-            city  = getattr(svc, "city",  None) or getattr(svc, "area", "")
-            state = getattr(svc, "state", "")
-            if city:
-                st.markdown(f"**Location:** {city}{', ' + state if state else ''}")
-            phone = getattr(svc, "phone", "")
-            if phone:
-                st.markdown(f"**Phone:** {phone}")
+            if svc.area:
+                st.markdown(f"**Area:** {svc.area}")
+            if svc.phone:
+                phone_digits = "".join(ch for ch in svc.phone if ch.isdigit())
+                st.markdown(f"**Phone:** [{svc.phone}](tel:{phone_digits})")
         with col2:
-            hours = getattr(svc, "hours", None)
-            if hours:
-                st.markdown(f"**Hours:** {hours}")
-            dist_mi = getattr(svc, "distance_miles", None)
-            dist_km = getattr(svc, "distance_km",    None)
-            travel  = getattr(svc, "travel_min_estimate", None)
-            if dist_mi is not None:
+            if svc.hours:
+                st.markdown(f"**Hours:** {svc.hours}")
+            if svc.distance_km is not None:
+                travel = svc.travel_min_estimate
                 st.markdown(
-                    f"**Distance:** ~{dist_mi:.1f} mi "
-                    f"(~{travel:.0f} min est.)" if travel else f"~{dist_mi:.1f} mi"
-                )
-            elif dist_km is not None:
-                st.markdown(
-                    f"**Distance:** ~{dist_km:.1f} km "
-                    f"(~{travel:.0f} min est.)" if travel else f"~{dist_km:.1f} km"
+                    f"**Distance:** ~{svc.distance_km:.1f} km"
+                    + (f"  (~{travel:.0f} min est.)" if travel else "")
                 )
             else:
                 st.markdown("**Distance:** Online — no travel needed")
-            val = getattr(svc, "val_year", None) or getattr(svc, "last_verified", "")
+            val = getattr(svc, "last_verified", "")
             if val:
                 st.markdown(f"**Verified:** {val}")
         st.markdown(f"*{best.reason}*")
-
-
-def _render_service_table(result: SessionResult) -> None:
-    """Show all ranked options in an expander."""
-    if not result.ranked:
-        return
-    with st.expander("All options", expanded=False):
-        for r in result.ranked:
-            svc = getattr(r, "hospital", None) or getattr(r, "service", None)
-            if svc is None:
-                continue
-            name  = getattr(svc, "display_name", None) or getattr(svc, "name", "")
-            phone = getattr(svc, "phone", "")
-            val   = getattr(svc, "val_year", None) or getattr(svc, "last_verified", "")
-            tag   = " *(fallback)*" if r.is_fallback else f" · score {r.score:.2f}"
-            st.markdown(
-                f"**{r.rank}. {name}**{tag}  \n"
-                f"{phone} · verified {val}"
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -395,14 +462,40 @@ def _process_user_input(user_text: str, area: str) -> None:
 # Main app
 # ---------------------------------------------------------------------------
 
+def _render_logo_title() -> None:
+    """Render the logo and app title on the same line, vertically centred."""
+    logo_path = _LOGO_PNG if _LOGO_PNG.exists() else (_LOGO_SVG if _LOGO_SVG.exists() else None)
+    if logo_path is not None:
+        mime = "image/png" if logo_path.suffix == ".png" else "image/svg+xml"
+        data = base64.b64encode(logo_path.read_bytes()).decode()
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:0.25rem">'
+            f'<img src="data:{mime};base64,{data}" style="height:56px;width:auto" alt="CareCompass logo"/>'
+            f'<span style="font-size:2rem;font-weight:700;line-height:1.2">CareCompass</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.title("CareCompass")
+
+
+def _render_footer() -> None:
+    """Render a small grey disclaimer footer at the bottom of the page."""
+    number = os.environ.get("EMERGENCY_NUMBER", "").strip() or "911"
+    st.markdown("---")
+    st.caption(
+        f"CareCompass gives general guidance, not medical advice. "
+        f"In an emergency call {number}.",
+    )
+
+
 def main() -> None:
     _init_state()
 
     # ── Header ────────────────────────────────────────────────────────────
-    st.title("CareCompass")
+    _render_logo_title()
     st.caption(
-        "Describe a health concern and I'll help you find the right local service. "
-        "**Demo data only — not real medical advice.**"
+        "Describe a health concern and I'll help you find the right local service."
     )
 
     # ── Location inputs ───────────────────────────────────────────────────
@@ -412,9 +505,18 @@ def main() -> None:
     if loc_notice:
         st.caption(f"ℹ️ {loc_notice}")
 
-    # Derive area string passed to run_session.
-    # Prefer ZIP, then city, then county, then state.
-    area: str = zip_ or city or county or state or "Unknown"
+    # Build a JSON-encoded location dict so run_session has full context.
+    # All four fields are included; _parse_area_to_location unpacks them.
+    loc_dict: dict = {}
+    if state:
+        loc_dict["state"] = state
+    if county:
+        loc_dict["county"] = county
+    if city:
+        loc_dict["city"] = city
+    if zip_:
+        loc_dict["zip"] = zip_
+    area: str = json.dumps(loc_dict) if loc_dict else "Unknown"
 
     # ── Auto-clear on location change ─────────────────────────────────────
     # When the user changes their location, the old result belongs to a
@@ -444,11 +546,13 @@ def main() -> None:
             st.warning(result.answer_text)
 
         else:
-            _render_recommendation_card(result)
-            _render_service_table(result)
-
-            with st.expander("Full recommendation text", expanded=False):
-                st.markdown(result.answer_text)
+            # hospitals_us path: RankedHospital has .hospital attribute.
+            # demo path: RankedResult has .service attribute.
+            is_hospitals = result.ranked and hasattr(result.ranked[0], "hospital")
+            if is_hospitals:
+                _render_hospital_cards(result)
+            else:
+                _render_demo_card(result)
 
         # ── Single action button per tier ─────────────────────────────────
         if not st.session_state.handoff_shown:
@@ -472,6 +576,9 @@ def main() -> None:
     # ── Chat input ────────────────────────────────────────────────────────
     # A new message automatically replaces the previous result via
     # _process_user_input; no explicit "Start over" button is needed.
+    # ── Footer ────────────────────────────────────────────────────────────
+    _render_footer()
+
     if prompt := st.chat_input("Describe your concern here…"):
         # Require at least state or ZIP before proceeding.
         if not state and not zip_:
@@ -490,10 +597,9 @@ def main() -> None:
             if result is None:
                 st.markdown("Something went wrong. Please try again.")
             else:
-                reply = result.answer_text[:500] + (
-                    "…" if len(result.answer_text) > 500 else ""
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": result.answer_text}
                 )
-                st.session_state.messages.append({"role": "assistant", "content": reply})
                 st.rerun()
 
 

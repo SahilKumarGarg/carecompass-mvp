@@ -406,18 +406,17 @@ class TestBenchmarkMetrics:
         }
         assert required.issubset(_METRICS.keys())
 
-    def test_emergency_total_is_sixteen(self) -> None:
-        """4 original + 12 new (RF001×2, RF002×2, RF003×1, RF004×1, RF005×2, RF006×1, RF007×1, RF010×2) = 16."""
-        assert _METRICS["emergency_total"] == 16
+    def test_emergency_total_is_seventeen(self) -> None:
+        """16 previous + SCN049 (thunderclap headache, RF013) = 17."""
+        assert _METRICS["emergency_total"] == 17
 
-    def test_urgent_total_is_seventeen(self) -> None:
-        """9 original + 8 new (RF008×2, RF009×2, RF011×3, no-rule×1) = 17.
-        SCN038 and SCN039 reclassified to routine (no red-flag rule fires)."""
-        assert _METRICS["urgent_total"] == 17
+    def test_urgent_total_is_nineteen(self) -> None:
+        """17 previous + SCN048 (unable to walk, RF012) + SCN050 (headache+fever+stiff neck, RF014) = 19."""
+        assert _METRICS["urgent_total"] == 19
 
-    def test_tier_total_is_fortyseven(self) -> None:
-        """16 emergency + 17 urgent + 14 routine = 47."""
-        assert _METRICS["tier_total"] == 47
+    def test_tier_total_is_fifty(self) -> None:
+        """17 emergency + 19 urgent + 14 routine = 50."""
+        assert _METRICS["tier_total"] == 50
 
     def test_all_scenarios_ran(self) -> None:
         assert len(_OUTCOMES) == len(_ALL_SCENARIOS)

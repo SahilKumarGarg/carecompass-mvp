@@ -659,6 +659,48 @@
       "notes": "Flu jab — routine; 'vaccination' keyword routes to pharmacy or GP.",
       "location": {"state": "AZ", "county": "MARICOPA", "city": "PHOENIX", "zip": "85016"},
       "acceptable_hospital_types": ["GENERAL ACUTE CARE", "CRITICAL ACCESS"]
+    },
+    {
+      "id": "SCN048",
+      "label": "urgent_unable_to_walk_headache",
+      "tier": "urgent",
+      "area": "{\"state\": \"AL\", \"county\": \"COVINGTON\", \"city\": \"ANDALUSIA\", \"zip\": \"36420\"}",
+      "user_text": "I am feeling sick from last 4 days and not able to walk, headache as well",
+      "expected_tier": "urgent",
+      "expected_service_type": "hospital_emergency",
+      "acceptable_service_types": ["hospital_emergency"],
+      "expected_red_flag_id": "RF012",
+      "notes": "The originally-missed input. RF012 phrase fires on 'not able to walk'; RF014 term_groups fire on headache+unable_to_walk.",
+      "location": {"state": "AL", "county": "COVINGTON", "city": "ANDALUSIA", "zip": "36420"},
+      "acceptable_hospital_types": ["GENERAL ACUTE CARE", "CRITICAL ACCESS"]
+    },
+    {
+      "id": "SCN049",
+      "label": "emergency_worst_headache_ever",
+      "tier": "emergency",
+      "area": "{\"state\": \"AL\", \"county\": \"COVINGTON\", \"city\": \"ANDALUSIA\", \"zip\": \"36420\"}",
+      "user_text": "I have the worst headache of my life, it came on suddenly about 20 minutes ago",
+      "expected_tier": "emergency",
+      "expected_service_type": "hospital_emergency",
+      "acceptable_service_types": ["hospital_emergency"],
+      "expected_red_flag_id": "RF013",
+      "notes": "Thunderclap-type headache phrase 'worst headache of my life' fires RF013 (emergency).",
+      "location": {"state": "AL", "county": "COVINGTON", "city": "ANDALUSIA", "zip": "36420"},
+      "acceptable_hospital_types": ["GENERAL ACUTE CARE", "CRITICAL ACCESS"]
+    },
+    {
+      "id": "SCN050",
+      "label": "urgent_headache_fever_stiff_neck",
+      "tier": "urgent",
+      "area": "{\"state\": \"AL\", \"county\": \"COVINGTON\", \"city\": \"ANDALUSIA\", \"zip\": \"36420\"}",
+      "user_text": "I have a bad headache and my neck is really stiff and I have had a fever since yesterday",
+      "expected_tier": "urgent",
+      "expected_service_type": "hospital_emergency",
+      "acceptable_service_types": ["hospital_emergency"],
+      "expected_red_flag_id": "RF014",
+      "notes": "Headache + stiff neck + fever fires RF014 (urgent, possible meningitis).",
+      "location": {"state": "AL", "county": "COVINGTON", "city": "ANDALUSIA", "zip": "36420"},
+      "acceptable_hospital_types": ["GENERAL ACUTE CARE", "CRITICAL ACCESS"]
     }
   ]
 }

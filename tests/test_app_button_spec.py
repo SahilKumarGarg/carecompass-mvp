@@ -192,3 +192,30 @@ class TestGetButtonSpecRoutine:
     def test_label_is_approved_string(self) -> None:
         spec = get_button_spec("routine", _make_result("routine"))
         assert spec["label"] == "Create a summary to share with my provider"
+
+
+# ---------------------------------------------------------------------------
+# Page config — browser tab title must not contain "Demo"
+# ---------------------------------------------------------------------------
+
+class TestPageConfig:
+    def test_page_title_contains_no_demo(self) -> None:
+        """page_title must not include the word 'Demo' in any capitalisation."""
+        import ast, pathlib
+        source = pathlib.Path(__file__).parent.parent.joinpath("app.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "set_page_config"
+            ):
+                for kw in node.keywords:
+                    if kw.arg == "page_title" and isinstance(kw.value, ast.Constant):
+                        title = kw.value.value
+                        assert "demo" not in title.lower(), (
+                            f"page_title {title!r} still contains 'Demo'. "
+                            "Remove it from the set_page_config call."
+                        )
+                        return
+        pytest.fail("set_page_config(page_title=...) not found in app.py")

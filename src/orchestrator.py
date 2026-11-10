@@ -149,6 +149,9 @@ def _parse_area_to_location(area: str) -> dict:
     return {"_no_state": True}
 
 
+_DISTANT_HOSPITAL_THRESHOLD_MILES = 100.0
+
+
 def _build_answer_text_hospitals(
     ranked: list[RankedHospital],
     tier: str,
@@ -158,6 +161,7 @@ def _build_answer_text_hospitals(
 
     Includes:
     - A widening notice if the location was broadened.
+    - A distance warning if the nearest hospital is more than 100 miles away.
     - For urgent tier: the standard urgent header from messages.json.
     - Each hospital: name, ID, phone, validation year, 'call ahead to confirm'.
     - The reason text (which includes address, distance, type, val_year, call-ahead).
@@ -170,6 +174,18 @@ def _build_answer_text_hospitals(
     if location and location.notice:
         lines.append(f"*ℹ️ {location.notice}*")
         lines.append("")
+
+    # 100-mile warning — shown when the nearest non-fallback result is far away.
+    if ranked:
+        top_non_fallback = next((r for r in ranked if not r.is_fallback), None)
+        if top_non_fallback is not None:
+            dist = top_non_fallback.hospital.distance_miles
+            if dist is not None and dist > _DISTANT_HOSPITAL_THRESHOLD_MILES:
+                lines.append(
+                    f"⚠️ **The nearest hospital is approximately {dist:.0f} miles away.** "
+                    "Consider calling 911 or asking someone to drive you if you cannot travel that distance safely."
+                )
+                lines.append("")
 
     if not ranked:
         body = messages["needs_human_review"]["body"]

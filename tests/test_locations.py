@@ -734,3 +734,207 @@ class TestStatusClosedFilteredFromFindHospitals:
         assert "OPEN_GENERAL_01" in ids, (
             "A STATUS=OPEN GENERAL ACUTE CARE hospital must appear in results"
         )
+
+
+# ===========================================================================
+# Bug-fix tests: AZ location, state isolation via JSON area, 100-mile warning
+# ===========================================================================
+
+class TestArizonaCountyCity:
+    """AZ / COCHISE / BENSON must return BENSON HOSPITAL and stay in AZ."""
+
+    def test_cochise_county_returns_benson_hospital(self) -> None:
+        loc = resolve_location(state="AZ", county="COCHISE")
+        ids = [r["ID"] for r in loc.rows]
+        assert "0002085602" in ids, f"BENSON HOSPITAL not found in COCHISE county. IDs: {ids}"
+
+    def test_cochise_county_rows_all_in_az(self) -> None:
+        loc = resolve_location(state="AZ", county="COCHISE")
+        for row in loc.rows:
+            assert row["STATE"] == "AZ", f"Expected AZ, got {row['STATE']}: {row['NAME']}"
+
+    def test_benson_city_returns_benson_hospital(self) -> None:
+        loc = resolve_location(state="AZ", city="BENSON")
+        ids = [r["ID"] for r in loc.rows]
+        assert "0002085602" in ids, f"BENSON HOSPITAL not found for BENSON city. IDs: {ids}"
+
+    def test_benson_city_rows_all_in_az(self) -> None:
+        loc = resolve_location(state="AZ", city="BENSON")
+        for row in loc.rows:
+            assert row["STATE"] == "AZ", f"Got non-AZ row: {row['STATE']} {row['NAME']}"
+
+    def test_ref_lat_lon_are_floats(self) -> None:
+        loc = resolve_location(state="AZ", county="COCHISE")
+        assert isinstance(loc.ref_lat, float)
+        assert isinstance(loc.ref_lon, float)
+
+    def test_ref_lat_in_arizona_range(self) -> None:
+        """Arizona latitude band is roughly 31–37°N."""
+        loc = resolve_location(state="AZ", county="COCHISE")
+        assert 31.0 <= loc.ref_lat <= 37.5, f"ref_lat {loc.ref_lat} outside AZ range"
+
+    def test_ref_lon_in_arizona_range(self) -> None:
+        """Arizona longitude band is roughly −115 to −109°W."""
+        loc = resolve_location(state="AZ", county="COCHISE")
+        assert -115.0 <= loc.ref_lon <= -109.0, f"ref_lon {loc.ref_lon} outside AZ range"
+
+    def test_find_hospitals_returns_az_hospitals_only(self) -> None:
+        loc = resolve_location(state="AZ", county="COCHISE")
+        case = _case(concern="chest pain", who="myself")
+        hospitals = find_hospitals(loc.ref_lat, loc.ref_lon, case, "urgent", loc.rows)
+        for h in hospitals:
+            assert h.state == "AZ", f"Got non-AZ hospital: {h.state} {h.name}"
+
+    def test_find_hospitals_distance_from_cochise_ref_point(self) -> None:
+        """All hospitals in the COCHISE result must be closer than 200 miles
+        to the COCHISE reference point (intra-Arizona distances only)."""
+        loc = resolve_location(state="AZ", county="COCHISE")
+        case = _case()
+        hospitals = find_hospitals(loc.ref_lat, loc.ref_lon, case, "routine", loc.rows)
+        for h in hospitals:
+            assert h.distance_miles is not None
+            assert h.distance_miles < 200.0, (
+                f"{h.name} is {h.distance_miles:.1f} miles from the COCHISE ref point — "
+                "unexpectedly far for an intra-county result"
+            )
+
+
+class TestArizonaZipOnly:
+    """ZIP 85602 (Benson, AZ) — state must be AZ, distance must be non-negative."""
+
+    def test_zip_85602_resolves_to_benson_hospital(self) -> None:
+        loc = resolve_location(zip="85602")
+        ids = [r["ID"] for r in loc.rows]
+        assert "0002085602" in ids, f"BENSON HOSPITAL not found for ZIP 85602. IDs: {ids}"
+
+    def test_zip_85602_rows_are_in_az(self) -> None:
+        loc = resolve_location(zip="85602")
+        for row in loc.rows:
+            assert row["STATE"] == "AZ", f"Got non-AZ row for AZ ZIP: {row['STATE']} {row['NAME']}"
+
+    def test_zip_85602_with_state_az_finds_same_hospital(self) -> None:
+        """Passing state=AZ alongside ZIP=85602 must return the same result."""
+        loc_zip = resolve_location(zip="85602")
+        loc_full = resolve_location(state="AZ", zip="85602")
+        ids_zip = {r["ID"] for r in loc_zip.rows}
+        ids_full = {r["ID"] for r in loc_full.rows}
+        assert ids_zip == ids_full
+
+    def test_zip_36420_with_state_az_does_not_return_al_hospital(self) -> None:
+        """ZIP 36420 belongs to Alabama. Passing state=AZ must widen within AZ,
+        not return ANDALUSIA HEALTH (AL)."""
+        loc = resolve_location(state="AZ", zip="36420")
+        # Must either widen (widened_from is not None) or return AZ rows only.
+        for row in loc.rows:
+            assert row["STATE"] == "AZ", (
+                f"Got non-AZ hospital '{row['NAME']}' ({row['STATE']}) when "
+                f"state=AZ was supplied alongside an AL ZIP"
+            )
+
+    def test_zip_only_distance_non_negative(self) -> None:
+        loc = resolve_location(zip="85602")
+        case = _case()
+        hospitals = find_hospitals(loc.ref_lat, loc.ref_lon, case, "routine", loc.rows)
+        assert len(hospitals) > 0
+        for h in hospitals:
+            assert h.distance_miles is not None
+            assert h.distance_miles >= 0.0
+
+
+class TestDistantHospitalWarning:
+    """_build_answer_text_hospitals must show a warning when the nearest
+    hospital is more than 100 miles from the reference point."""
+
+    def _ranked_hospital_at_distance(self, distance_miles: float) -> "RankedHospital":
+        from src.advisor import RankedHospital
+        h = _hospital(id="FAR001", name="FAR HOSPITAL", distance_miles=distance_miles)
+        return RankedHospital(
+            rank=1,
+            hospital=h,
+            score=0.5,
+            reason="Test reason. Call ahead to confirm.",
+            is_fallback=False,
+        )
+
+    def test_warning_shown_when_nearest_over_100_miles(self) -> None:
+        from src.orchestrator import _build_answer_text_hospitals
+        ranked = [self._ranked_hospital_at_distance(150.0)]
+        text = _build_answer_text_hospitals(ranked, "routine")
+        assert "150" in text or "miles away" in text.lower(), (
+            "Expected a distance warning for a 150-mile hospital"
+        )
+
+    def test_warning_contains_miles_away(self) -> None:
+        from src.orchestrator import _build_answer_text_hospitals
+        ranked = [self._ranked_hospital_at_distance(120.0)]
+        text = _build_answer_text_hospitals(ranked, "routine")
+        assert "miles away" in text.lower()
+
+    def test_no_warning_when_under_100_miles(self) -> None:
+        from src.orchestrator import _build_answer_text_hospitals
+        ranked = [self._ranked_hospital_at_distance(50.0)]
+        text = _build_answer_text_hospitals(ranked, "routine")
+        assert "miles away" not in text.lower()
+
+    def test_no_warning_at_exactly_100_miles(self) -> None:
+        """Threshold is strict >100, not >=100."""
+        from src.orchestrator import _build_answer_text_hospitals
+        ranked = [self._ranked_hospital_at_distance(100.0)]
+        text = _build_answer_text_hospitals(ranked, "routine")
+        assert "miles away" not in text.lower()
+
+    def test_warning_shown_for_urgent_tier_too(self) -> None:
+        from src.orchestrator import _build_answer_text_hospitals
+        ranked = [self._ranked_hospital_at_distance(200.0)]
+        text = _build_answer_text_hospitals(ranked, "urgent")
+        assert "miles away" in text.lower()
+
+    def test_fallback_only_does_not_trigger_warning(self) -> None:
+        """If all results are fallbacks the warning must not fire."""
+        from src.advisor import RankedHospital
+        from src.orchestrator import _build_answer_text_hospitals
+        h = _hospital(id="FB001", name="FALLBACK HOSP", distance_miles=200.0)
+        ranked = [RankedHospital(rank=1, hospital=h, score=0.1, reason="fallback reason", is_fallback=True)]
+        text = _build_answer_text_hospitals(ranked, "routine")
+        assert "miles away" not in text.lower()
+
+
+class TestJsonAreaRoundTrip:
+    """app.py now builds a JSON dict; _parse_area_to_location must unpack it correctly."""
+
+    def test_state_county_city_zip_all_parsed(self) -> None:
+        import json as _json
+        from src.orchestrator import _parse_area_to_location
+        area = _json.dumps({"state": "AZ", "county": "COCHISE", "city": "BENSON", "zip": "85602"})
+        kwargs = _parse_area_to_location(area)
+        assert kwargs.get("state") == "AZ"
+        assert kwargs.get("city") == "BENSON"
+        assert kwargs.get("zip") == "85602"
+
+    def test_state_only_json_parsed(self) -> None:
+        import json as _json
+        from src.orchestrator import _parse_area_to_location
+        area = _json.dumps({"state": "AZ"})
+        kwargs = _parse_area_to_location(area)
+        assert kwargs.get("state") == "AZ"
+        assert "_no_state" not in kwargs
+
+    def test_zip_without_state_still_accepted(self) -> None:
+        import json as _json
+        from src.orchestrator import _parse_area_to_location
+        area = _json.dumps({"zip": "85602"})
+        kwargs = _parse_area_to_location(area)
+        assert kwargs.get("zip") == "85602"
+        assert "_no_state" not in kwargs
+
+    def test_json_with_state_az_and_al_zip_resolves_to_az(self) -> None:
+        """state=AZ + zip=36420 (an AL ZIP) must widen within AZ."""
+        import json as _json
+        from src.orchestrator import _parse_area_to_location
+        area = _json.dumps({"state": "AZ", "zip": "36420"})
+        kwargs = _parse_area_to_location(area)
+        assert kwargs.get("state") == "AZ"
+        # Resolving this must yield AZ rows only.
+        loc = resolve_location(**kwargs)
+        for row in loc.rows:
+            assert row["STATE"] == "AZ"

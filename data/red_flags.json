@@ -357,6 +357,144 @@
           ]
         }
       ]
+    },
+    {
+      "id": "RF012",
+      "name": "inability_to_walk_or_move",
+      "tier": "urgent",
+      "service_type": "hospital_emergency",
+      "description": "Sudden or unexplained inability to walk, stand or move limbs — needs clinical review",
+      "needs_clinical_review": true,
+      "phrases": [
+        "unable to walk",
+        "can't walk",
+        "cant walk",
+        "cannot walk",
+        "unable to stand",
+        "can't stand",
+        "cant stand",
+        "cannot stand",
+        "legs not working",
+        "legs stopped working",
+        "legs giving way",
+        "legs gave out",
+        "legs have given out",
+        "can't move my legs",
+        "cant move my legs",
+        "cannot move my legs",
+        "not able to walk",
+        "not able to stand",
+        "limbs not working",
+        "can't feel my legs",
+        "cant feel my legs",
+        "lost the use of my legs",
+        "legs are numb"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "walk", "walking", "stand", "standing", "move", "moving",
+            "legs", "leg", "limbs", "limb", "feet", "mobility"
+          ]
+        },
+        {
+          "synonyms": [
+            "unable to", "not able to", "can't", "cannot", "cant",
+            "can no longer", "lost ability", "no longer able",
+            "won't work", "not working", "gave out", "giving out",
+            "given out", "paralysed", "paralyzed", "stopped working",
+            "stopped being able", "completely lost", "suddenly lost",
+            "lost all", "lost the ability"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RF013",
+      "name": "thunderclap_headache",
+      "tier": "emergency",
+      "service_type": "hospital_emergency",
+      "description": "Sudden-onset or worst-ever headache — possible subarachnoid haemorrhage — needs clinical review",
+      "needs_clinical_review": true,
+      "phrases": [
+        "worst headache",
+        "worst headache of my life",
+        "worst headache ever",
+        "thunderclap headache",
+        "thunderclap",
+        "sudden severe headache",
+        "sudden headache",
+        "headache came on suddenly",
+        "headache came on all of a sudden",
+        "worst ever headache",
+        "never had a headache like this",
+        "headache like a thunderclap",
+        "worst head pain",
+        "worst head pain ever",
+        "worst head pain of my life",
+        "sudden onset headache",
+        "explosive headache"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "headache", "head pain", "head is pounding", "head pounding",
+            "head hurts", "head ache", "migraine"
+          ]
+        },
+        {
+          "synonyms": [
+            "worst", "worst ever", "worst of my life", "never had before",
+            "sudden", "suddenly", "all of a sudden", "out of nowhere",
+            "thunderclap", "explosive", "severe", "excruciating",
+            "unbearable", "most severe", "came on fast",
+            "came on suddenly", "hit me suddenly", "hit like a thunderclap"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RF014",
+      "name": "headache_with_red_flag_features",
+      "tier": "urgent",
+      "service_type": "hospital_emergency",
+      "description": "Headache combined with fever, stiff neck, confusion or new limb weakness — possible meningitis or raised ICP — needs clinical review",
+      "needs_clinical_review": true,
+      "phrases": [
+        "headache and stiff neck",
+        "headache and neck stiffness",
+        "stiff neck and headache",
+        "neck stiffness and headache",
+        "headache and fever and stiff neck",
+        "headache and high temperature and stiff neck",
+        "headache and sensitivity to light",
+        "headache and photophobia",
+        "meningitis",
+        "meningeal",
+        "rash and headache",
+        "rash and stiff neck"
+      ],
+      "term_groups": [
+        {
+          "synonyms": [
+            "headache", "head pain", "head hurts", "head ache",
+            "head is pounding", "head pounding"
+          ]
+        },
+        {
+          "synonyms": [
+            "fever", "temperature", "high temperature", "burning up",
+            "feverish", "febrile", "pyrexia", "sweating",
+            "stiff neck", "neck stiff", "stiff in the neck", "neck stiffness",
+            "neck pain", "cant move neck", "can't move neck",
+            "cannot move neck", "rigid neck",
+            "confused", "confusion", "disoriented", "disorientated",
+            "not making sense", "delirious", "delirium",
+            "weak", "weakness", "numb", "numbness", "unable to walk",
+            "not able to walk", "can't walk", "cant walk"
+          ]
+        }
+      ]
     }
   ]
 }
