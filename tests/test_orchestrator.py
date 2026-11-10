@@ -262,10 +262,10 @@ class TestHandoffSummary:
         summary = create_handoff_summary(result)
         assert result.tier in summary
 
-    def test_handoff_contains_demo_disclaimer(self) -> None:
+    def test_handoff_contains_not_medical_advice(self) -> None:
         result = _run("I need a repeat prescription.", area="Greenfield")
         summary = create_handoff_summary(result)
-        assert "demo" in summary.lower() or "not medical advice" in summary.lower()
+        assert "not medical advice" in summary.lower()
 
     def test_handoff_summary_not_set_on_session_result(self) -> None:
         """run_session must NOT auto-create the handoff summary."""

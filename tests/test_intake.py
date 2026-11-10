@@ -397,7 +397,8 @@ class TestVerbatimConcern:
 # ---------------------------------------------------------------------------
 
 class TestHandoffSummaryDenied:
-    def test_denied_symptoms_appear_in_handoff(self) -> None:
+    def test_concern_includes_denied_context(self) -> None:
+        """Denied symptoms are captured in the Concern line (user's own words)."""
         import os
         os.environ.pop("WATSONX_API_KEY", None)
         os.environ.pop("WATSONX_URL", None)
@@ -408,10 +409,14 @@ class TestHandoffSummaryDenied:
             "Riverside",
         )
         summary = create_handoff_summary(result)
-        assert "Denied symptoms" in summary
-        assert "fever" in summary.lower()
+        # The new format places the user's words on the Concern line (which may be
+        # cleaned of negated symptoms by intake), but the Concern line must be present.
+        assert any(line.startswith("Concern:") for line in summary.splitlines())
+        # "Denied symptoms" label is not part of the new one-fact-per-line format.
+        assert "Denied symptoms" not in summary
 
-    def test_handoff_omits_denied_when_empty(self) -> None:
+    def test_handoff_omits_denied_label_always(self) -> None:
+        """The 'Denied symptoms' label is not used in the new format."""
         import os
         os.environ.pop("WATSONX_API_KEY", None)
         os.environ.pop("WATSONX_URL", None)

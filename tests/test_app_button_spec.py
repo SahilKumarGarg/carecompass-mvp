@@ -82,6 +82,7 @@ def _make_result(
         candidates=[],
         ranked=ranked or [],
         answer_text="",
+        display_intro="",
         check_passed=True,
         needs_human_review=needs_human_review,
         handoff_summary=None,

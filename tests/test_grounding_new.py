@@ -4,7 +4,8 @@ Tests added per task requirements:
 1. No closed hospital (excluded TYPE) ever appears in an answer.
 2. A made-up hospital name is blocked by the grounding check.
 3. The widening notice appears when a ZIP has no hospitals.
-4. Exactly one action button per tier.
+4. Exactly one case-action button per tier (Start over is navigation, not a case action).
+5. Header row is built before result display; old bottom badge is gone.
 """
 
 from __future__ import annotations
@@ -293,6 +294,7 @@ class TestExactlyOneButtonPerTier:
             candidates=[],
             ranked=ranked or [],
             answer_text="",
+            display_intro="",
             check_passed=True,
             needs_human_review=False,
             handoff_summary=None,
@@ -522,13 +524,16 @@ class TestRunSessionRejectsNoState:
 
 
 # ---------------------------------------------------------------------------
-# Fix 3: No "Start over" button — result screen defines exactly one button
+# Fix 3: Case-action buttons — result screen defines exactly one case action
+#
+# "Start over" is a navigation control in the header and is NOT a case action.
+# get_button_spec deals only with case actions (call, directions, summary).
 # ---------------------------------------------------------------------------
 
 class TestNoStartOverButton:
-    """The rendered result screen must have only one action button.
-    We verify this by asserting get_button_spec returns exactly one dict and
-    that there is no "start_over" key or equivalent in the return value."""
+    """The case-action layer (get_button_spec) must return exactly one dict per
+    tier and must never contain a 'start_over' key.  Start over is a separate
+    navigation button in the header and is not counted among case actions."""
 
     def _make_result(self, tier: str):
         from src.orchestrator import SessionResult
@@ -541,6 +546,7 @@ class TestNoStartOverButton:
             candidates=[],
             ranked=[],
             answer_text="Test answer.",
+            display_intro="Test answer.",
             check_passed=True,
             needs_human_review=False,
             handoff_summary=None,
@@ -563,19 +569,27 @@ class TestNoStartOverButton:
         assert isinstance(spec, dict)
 
     def test_spec_has_no_start_over_key(self) -> None:
-        """get_button_spec must not contain a 'start_over' key — that button is gone."""
+        """get_button_spec must not contain a 'start_over' key.
+
+        Start over is a header navigation button — it is not a case action and
+        must not appear in get_button_spec output.
+        """
         for tier in ("emergency", "urgent", "routine"):
             spec = get_button_spec(tier, self._make_result(tier))
             assert "start_over" not in spec, (
                 f"Unexpected 'start_over' key in spec for tier={tier!r}"
             )
 
-    def test_result_screen_defines_exactly_one_button_per_tier(self) -> None:
-        """Calling get_button_spec for each tier must return a single dict each time."""
+    def test_case_action_spec_is_single_dict_not_list(self) -> None:
+        """get_button_spec returns exactly one case-action dict per tier.
+
+        Start over is navigation and is excluded from this count.
+        """
         for tier in ("emergency", "urgent", "routine"):
             specs = get_button_spec(tier, self._make_result(tier))
             assert isinstance(specs, dict), (
-                f"Expected a single dict (one button) for tier={tier!r}, got {type(specs)}"
+                f"Expected a single dict (one case action) for tier={tier!r}, "
+                f"got {type(specs)}"
             )
 
 
@@ -648,3 +662,176 @@ class TestForbiddenClaimsViaFinalCheck:
         # hospitals_us path — must fail
         h_result = final_check(answer_with_forbidden, [], tier="routine", hospital_ids=["0001336420"])
         assert h_result.passed is False
+
+
+# ---------------------------------------------------------------------------
+# UI layout — header built before results; old bottom badge removed
+# ---------------------------------------------------------------------------
+
+class TestHeaderLayout:
+    """Structural tests on app.py source code using AST / text analysis.
+
+    These tests verify layout order and that removed helpers stay removed.
+    They do NOT import Streamlit or run the app.
+    """
+
+    def _app_source(self) -> str:
+        import pathlib
+        return pathlib.Path(__file__).parent.parent.joinpath("app.py").read_text(encoding="utf-8")
+
+    # ── _render_tier_banner must not exist ────────────────────────────────
+
+    def test_render_tier_banner_is_removed(self) -> None:
+        """The old _render_tier_banner() helper must not be defined in app.py.
+
+        It was replaced by the header-row badge (_render_case_badge_html).
+        """
+        source = self._app_source()
+        assert "def _render_tier_banner" not in source, (
+            "_render_tier_banner is still defined in app.py — it must be removed."
+        )
+
+    def test_render_tier_banner_not_called(self) -> None:
+        """_render_tier_banner must not be called anywhere in app.py."""
+        source = self._app_source()
+        assert "_render_tier_banner(" not in source, (
+            "_render_tier_banner is still called from app.py."
+        )
+
+    # ── _render_header_row must exist ─────────────────────────────────────
+
+    def test_render_header_row_is_defined(self) -> None:
+        """_render_header_row must be defined in app.py."""
+        source = self._app_source()
+        assert "def _render_header_row" in source, (
+            "_render_header_row is not defined in app.py."
+        )
+
+    def test_render_case_badge_html_is_defined(self) -> None:
+        """_render_case_badge_html must be defined in app.py."""
+        source = self._app_source()
+        assert "def _render_case_badge_html" in source, (
+            "_render_case_badge_html is not defined in app.py."
+        )
+
+    # ── Header is built before the result display in main() ───────────────
+
+    def test_header_row_called_before_result_display_in_main(self) -> None:
+        """In main(), _render_header_row must appear before the result display block.
+
+        We check source-level line ordering as a proxy for render order.
+        """
+        source = self._app_source()
+        lines = source.splitlines()
+
+        header_line = next(
+            (i for i, ln in enumerate(lines) if "_render_header_row(" in ln),
+            None,
+        )
+        # The result display block is guarded by checking result.state
+        result_display_line = next(
+            (
+                i for i, ln in enumerate(lines)
+                if 'result.state not in ("describe",)' in ln
+                or "result.state not in" in ln
+            ),
+            None,
+        )
+
+        assert header_line is not None, (
+            "_render_header_row() call not found in app.py"
+        )
+        assert result_display_line is not None, (
+            "result.state display guard not found in app.py"
+        )
+        assert header_line < result_display_line, (
+            f"_render_header_row (line {header_line + 1}) must come before "
+            f"the result display block (line {result_display_line + 1}) in main()."
+        )
+
+    # ── Badge HTML properties ─────────────────────────────────────────────
+
+    def test_badge_html_uses_min_height_56(self) -> None:
+        """The badge container must declare min-height:56px."""
+        source = self._app_source()
+        assert "min-height:56px" in source, (
+            "Badge HTML must include 'min-height:56px'."
+        )
+
+    def test_badge_html_uses_bold_font_weight(self) -> None:
+        """The tier word in the badge must be rendered bold (font-weight:700)."""
+        source = self._app_source()
+        assert "font-weight:700" in source, (
+            "Badge HTML must include 'font-weight:700' for the tier word."
+        )
+
+    def test_badge_cfg_has_all_three_tiers(self) -> None:
+        """_BADGE_CFG must define entries for emergency, urgent and routine."""
+        source = self._app_source()
+        for tier in ("emergency", "urgent", "routine"):
+            assert f'"{tier}"' in source, (
+                f"_BADGE_CFG is missing an entry for tier={tier!r}."
+            )
+
+    def test_badge_emergency_word_is_uppercase(self) -> None:
+        source = self._app_source()
+        assert '"EMERGENCY"' in source, "Emergency tier word must be 'EMERGENCY' (all-caps)."
+
+    def test_badge_urgent_word_is_uppercase(self) -> None:
+        source = self._app_source()
+        assert '"URGENT"' in source, "Urgent tier word must be 'URGENT' (all-caps)."
+
+    def test_badge_routine_word_is_uppercase(self) -> None:
+        source = self._app_source()
+        assert '"ROUTINE"' in source, "Routine tier word must be 'ROUTINE' (all-caps)."
+
+    # ── _full_reset keeps location keys ──────────────────────────────────
+
+    def test_full_reset_defined(self) -> None:
+        source = self._app_source()
+        assert "def _full_reset" in source, "_full_reset() must be defined in app.py."
+
+    def test_full_reset_keeps_location_keys(self) -> None:
+        """_full_reset must NOT delete or reset loc_state / loc_zip / etc."""
+        source = self._app_source()
+        lines = source.splitlines()
+        in_fn = False
+        fn_indent = 0
+        full_reset_body_lines: list[str] = []
+        for line in lines:
+            stripped = line.lstrip()
+            indent = len(line) - len(stripped)
+            if stripped.startswith("def _full_reset"):
+                in_fn = True
+                fn_indent = indent
+                continue
+            if in_fn:
+                if stripped == "" or indent > fn_indent:
+                    full_reset_body_lines.append(line)
+                else:
+                    break
+        # Strip comment lines so the comment "# keep loc_state, ..." doesn't
+        # cause a false positive.
+        code_lines = [ln for ln in full_reset_body_lines if ln.lstrip()[:1] != "#"]
+        body = "\n".join(code_lines)
+        for loc_key in ("loc_state", "loc_county", "loc_city", "loc_zip"):
+            assert loc_key not in body, (
+                f"_full_reset must NOT touch session key {loc_key!r} — "
+                "location selections must survive Start Over."
+            )
+
+    # ── Responsive CSS ───────────────────────────────────────────────────
+
+    def test_responsive_media_query_present(self) -> None:
+        """CSS must include a @media query for narrow screens."""
+        source = self._app_source()
+        assert "@media" in source, (
+            "app.py must include a @media CSS rule for narrow-screen stacking."
+        )
+
+    def test_narrow_screen_breakpoint_is_700px(self) -> None:
+        """The responsive breakpoint must be at or near 700 px."""
+        source = self._app_source()
+        assert "699px" in source or "700px" in source, (
+            "Responsive breakpoint must be at or near 700 px."
+        )

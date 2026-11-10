@@ -1,19 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Compass outer ring -->
-  <circle cx="32" cy="32" r="30" fill="#0F62FE" />
-  <circle cx="32" cy="32" r="26" fill="none" stroke="white" stroke-width="1.5" />
+  <!-- Transparent background -->
 
-  <!-- Cardinal tick marks -->
-  <line x1="32" y1="6"  x2="32" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/>
-  <line x1="32" y1="52" x2="32" y2="58" stroke="white" stroke-width="2" stroke-linecap="round"/>
-  <line x1="6"  y1="32" x2="12" y2="32" stroke="white" stroke-width="2" stroke-linecap="round"/>
-  <line x1="52" y1="32" x2="58" y2="32" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <!-- Compass ring (thin circle) -->
+  <circle cx="32" cy="32" r="30" fill="none" stroke="#0E7C86" stroke-width="1.5"/>
 
-  <!-- Compass needle — north (white) points upper-right, south (blue-tipped) lower-left -->
-  <polygon points="32,13 28,32 32,29 36,32" fill="white" />
-  <polygon points="32,51 28,32 32,35 36,32" fill="rgba(255,255,255,0.35)" />
+  <!-- Cardinal ticks: N and S teal (primary), E and W white on teal ring -->
+  <!-- North tick (teal, longer) -->
+  <line x1="32" y1="2"  x2="32" y2="9"  stroke="#0E7C86" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- South tick (teal) -->
+  <line x1="32" y1="55" x2="32" y2="62" stroke="#0E7C86" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- East tick (teal) -->
+  <line x1="55" y1="32" x2="62" y2="32" stroke="#0E7C86" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- West tick (teal) -->
+  <line x1="2"  y1="32" x2="9"  y2="32" stroke="#0E7C86" stroke-width="2.5" stroke-linecap="round"/>
 
-  <!-- Medical cross at centre — white, 10×10 -->
-  <rect x="29" y="26" width="6" height="12" rx="1" fill="white" />
-  <rect x="26" y="29" width="12" height="6"  rx="1" fill="white" />
+  <!-- Location pin body: teardrop shape centred around (32, 30), bottom point at (32, 52) -->
+  <!-- Circle part of pin -->
+  <circle cx="32" cy="27" r="13" fill="#0E7C86"/>
+  <!-- Pin tail (triangle below circle) -->
+  <polygon points="22,34 42,34 32,52" fill="#0E7C86"/>
+
+  <!-- White medical cross inside pin (centred at 32,27) -->
+  <rect x="29" y="21" width="6" height="12" rx="1.2" fill="white"/>
+  <rect x="26" y="24" width="12" height="6"  rx="1.2" fill="white"/>
 </svg>
