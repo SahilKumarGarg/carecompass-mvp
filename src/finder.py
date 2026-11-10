@@ -1,14 +1,19 @@
 """Finder module: map a case to service types and return filtered candidates.
 
-All service facts come exclusively from data/services.json.
+When DATA_SOURCE=hospitals_us (default) the module uses data/hospitals_clean.csv
+and returns HospitalCandidate objects.  When DATA_SOURCE=demo it falls back to
+the original data/services.json path and returns ServiceCandidate objects.
+
 No LLM calls are made in this module.
 """
 
 from __future__ import annotations
 
+import csv
 import dataclasses
 import json
 import math
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -24,13 +29,37 @@ _SERVICES_PATH = _DATA / "services.json"
 _CARE_LEVELS_PATH = _DATA / "care_levels.json"
 _AREA_CENTRES_PATH = _DATA / "area_centres.json"
 _RED_FLAGS_PATH = _DATA / "red_flags.json"
+_HOSPITALS_PATH = _DATA / "hospitals_clean.csv"
 
-# Travel speed used for time estimate (labelled as estimate throughout).
+# Travel speed used for distance→time estimate (labelled as estimate throughout).
 _TRAVEL_SPEED_KMH = 25.0
+_TRAVEL_SPEED_MPH = 40.0   # used for hospital mode
+_KM_PER_MILE = 1.60934
+
+# Hospital TYPE values included per care category.
+_TYPES_EMERGENCY = frozenset({"GENERAL ACUTE CARE", "CRITICAL ACCESS"})
+_TYPES_MENTAL_HEALTH = frozenset({"PSYCHIATRIC", "GENERAL ACUTE CARE"})
+_TYPES_CHILDREN = frozenset({"CHILDREN", "GENERAL ACUTE CARE"})
+_TYPES_PREGNANCY = frozenset({"GENERAL ACUTE CARE", "WOMEN"})
+_TYPES_ROUTINE = frozenset({"GENERAL ACUTE CARE", "CRITICAL ACCESS"})
+
+# Hospital TYPE values always excluded regardless of case.
+_TYPES_EXCLUDED = frozenset({
+    "MILITARY", "LONG TERM CARE", "REHABILITATION", "CHRONIC DISEASE", "SPECIAL",
+})
 
 
 # ---------------------------------------------------------------------------
-# Output schema
+# DATA_SOURCE selector
+# ---------------------------------------------------------------------------
+
+def _data_source() -> str:
+    """Return 'hospitals_us' (default) or 'demo' from the DATA_SOURCE env var."""
+    return os.environ.get("DATA_SOURCE", "hospitals_us").strip().lower()
+
+
+# ---------------------------------------------------------------------------
+# Output schema — demo path
 # ---------------------------------------------------------------------------
 
 @dataclasses.dataclass
@@ -54,13 +83,47 @@ class ServiceCandidate:
 
 
 # ---------------------------------------------------------------------------
-# Loaders (cached at module level after first call)
+# Output schema — hospitals_us path
+# ---------------------------------------------------------------------------
+
+@dataclasses.dataclass
+class HospitalCandidate:
+    """A hospital record from hospitals_clean.csv enriched with distance/travel estimates."""
+
+    id: str
+    name: str
+    display_name: str
+    address: str
+    city: str
+    state: str
+    zip: str
+    phone: str
+    type: str
+    county: str
+    countyfips: str
+    lat: float
+    lon: float
+    beds: Optional[int]
+    trauma: str
+    helipad: str
+    website: str
+    owner: str
+    val_year: str           # VAL_DATE year — always carried, no freshness penalty
+    distance_miles: Optional[float]
+    travel_min_estimate: Optional[float]   # at 40 mph — labelled as estimate
+    type_fit: int           # 3=primary type for case, 2=secondary, 1=tertiary
+    has_trauma: bool        # True if TRAUMA field is non-empty
+
+
+# ---------------------------------------------------------------------------
+# Loaders (cached at module level)
 # ---------------------------------------------------------------------------
 
 _services_cache: list[dict] | None = None
 _care_levels_cache: list[dict] | None = None
 _area_centres_cache: dict[str, dict] | None = None
 _red_flags_cache: dict[str, dict] | None = None
+_hospitals_cache: list[dict] | None = None
 
 
 def _load_services() -> list[dict]:
@@ -97,6 +160,16 @@ def _load_red_flags_index() -> dict[str, dict]:
     return _red_flags_cache
 
 
+def _load_hospitals() -> list[dict]:
+    """Load hospitals_clean.csv once; cache as a module-level list."""
+    global _hospitals_cache
+    if _hospitals_cache is None:
+        with _HOSPITALS_PATH.open(encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh)
+            _hospitals_cache = list(reader)
+    return _hospitals_cache
+
+
 # ---------------------------------------------------------------------------
 # Haversine distance
 # ---------------------------------------------------------------------------
@@ -111,8 +184,13 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return r * 2 * math.asin(math.sqrt(a))
 
 
+def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Return the great-circle distance in miles between two lat/lon points."""
+    return haversine_km(lat1, lon1, lat2, lon2) / _KM_PER_MILE
+
+
 # ---------------------------------------------------------------------------
-# Care-level mapping
+# Care-level mapping (demo path)
 # ---------------------------------------------------------------------------
 
 def map_to_service_types(
@@ -184,7 +262,173 @@ def map_to_service_types(
 
 
 # ---------------------------------------------------------------------------
-# Filtering and enrichment
+# Hospital type selection by case — hospitals_us path
+# ---------------------------------------------------------------------------
+
+def _hospital_types_for_case(
+    case: CaseResult,
+    tier: str,
+) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """Return (primary_types, secondary_types, tertiary_types) for hospital filtering.
+
+    Selection logic:
+    - Emergency or urgent              → GENERAL ACUTE CARE + CRITICAL ACCESS (prefer trauma)
+    - Self-harm / mental health        → PSYCHIATRIC first, then GENERAL ACUTE CARE
+    - Child patient                    → CHILDREN first, then GENERAL ACUTE CARE
+    - Pregnancy / obstetric            → GENERAL ACUTE CARE, then WOMEN
+    - Routine                          → GENERAL ACUTE CARE + CRITICAL ACCESS
+
+    Returns three frozensets corresponding to fit scores 3, 2, 1.
+    """
+    concern_lower = (case.concern + " " + case.who).lower()
+
+    is_mental = any(kw in concern_lower for kw in (
+        "mental health", "psychiatric", "self-harm", "self harm",
+        "suicide", "suicidal", "depression", "anxiety disorder",
+        "psychosis", "psychotic", "schizophrenia",
+    ))
+    is_child = any(kw in concern_lower for kw in (
+        "child", "infant", "baby", "toddler", "pediatric", "paediatric",
+        "newborn", "year-old", "year old",
+    ))
+    is_pregnancy = any(kw in concern_lower for kw in (
+        "pregnan", "labour", "labor", "birth", "maternity",
+        "obstetric", "antenatal", "prenatal", "postnatal",
+    ))
+    is_emergency_or_urgent = tier in ("emergency", "urgent")
+
+    if is_mental:
+        return (
+            frozenset({"PSYCHIATRIC"}),
+            frozenset({"GENERAL ACUTE CARE"}),
+            frozenset(),
+        )
+    if is_child:
+        return (
+            frozenset({"CHILDREN"}),
+            frozenset({"GENERAL ACUTE CARE"}),
+            frozenset(),
+        )
+    if is_pregnancy:
+        return (
+            frozenset({"GENERAL ACUTE CARE"}),
+            frozenset({"WOMEN"}),
+            frozenset(),
+        )
+    # Emergency/urgent and routine both use GENERAL ACUTE CARE + CRITICAL ACCESS.
+    return (
+        frozenset({"GENERAL ACUTE CARE"}),
+        frozenset({"CRITICAL ACCESS"}),
+        frozenset(),
+    )
+
+
+def _type_fit(hospital_type: str, primary: frozenset, secondary: frozenset, tertiary: frozenset) -> int:
+    """Return 3/2/1/0 for primary/secondary/tertiary/none match."""
+    t = hospital_type.upper()
+    if t in primary:
+        return 3
+    if t in secondary:
+        return 2
+    if t in tertiary:
+        return 1
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Filtering and enrichment — hospitals_us path
+# ---------------------------------------------------------------------------
+
+def find_hospitals(
+    ref_lat: float,
+    ref_lon: float,
+    case: CaseResult,
+    tier: str,
+    candidate_rows: list[dict],
+) -> list[HospitalCandidate]:
+    """Build HospitalCandidate objects from pre-filtered location rows.
+
+    Applies type filtering (excludes MILITARY, LONG TERM CARE, etc.), computes
+    haversine distance in miles and travel-time estimate at 40 mph.
+
+    Args:
+        ref_lat: Reference latitude (mean lat of the location match).
+        ref_lon: Reference longitude (mean lon of the location match).
+        case: Structured case from intake.
+        tier: Safety tier.
+        candidate_rows: Pre-filtered rows from locations.resolve_location().
+
+    Returns:
+        List of HospitalCandidate, unsorted (sorting done by advisor).
+    """
+    primary, secondary, tertiary = _hospital_types_for_case(case, tier)
+
+    results: list[HospitalCandidate] = []
+    for row in candidate_rows:
+        # Drop any CLOSED rows that slipped through (defence-in-depth).
+        if row.get("STATUS", "").strip().upper() == "CLOSED":
+            continue
+
+        htype = row.get("TYPE", "").upper()
+
+        # Hard exclusions first.
+        if htype in _TYPES_EXCLUDED:
+            continue
+
+        fit = _type_fit(htype, primary, secondary, tertiary)
+        if fit == 0:
+            continue  # type not relevant to this case
+
+        lat_str = row.get("LATITUDE", "")
+        lon_str = row.get("LONGITUDE", "")
+        try:
+            hlat = float(lat_str)
+            hlon = float(lon_str)
+        except (ValueError, TypeError):
+            continue  # no coordinates → skip
+
+        dist_miles = haversine_miles(ref_lat, ref_lon, hlat, hlon)
+        travel_min = round((dist_miles / _TRAVEL_SPEED_MPH) * 60, 1)
+
+        beds_str = row.get("BEDS", "")
+        beds: Optional[int] = None
+        if beds_str:
+            try:
+                beds = int(beds_str)
+            except ValueError:
+                pass
+
+        results.append(HospitalCandidate(
+            id=row["ID"],
+            name=row["NAME"],
+            display_name=row.get("display_name", row["NAME"].title()),
+            address=row.get("ADDRESS", ""),
+            city=row.get("CITY", ""),
+            state=row.get("STATE", ""),
+            zip=row.get("ZIP", ""),
+            phone=row.get("TELEPHONE", ""),
+            type=row.get("TYPE", ""),
+            county=row.get("COUNTY", ""),
+            countyfips=row.get("COUNTYFIPS", ""),
+            lat=hlat,
+            lon=hlon,
+            beds=beds,
+            trauma=row.get("TRAUMA", ""),
+            helipad=row.get("HELIPAD", ""),
+            website=row.get("WEBSITE", ""),
+            owner=row.get("OWNER", ""),
+            val_year=row.get("VAL_DATE", ""),
+            distance_miles=round(dist_miles, 2),
+            travel_min_estimate=travel_min,
+            type_fit=fit,
+            has_trauma=bool(row.get("TRAUMA", "").strip()),
+        ))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Filtering and enrichment — demo path
 # ---------------------------------------------------------------------------
 
 def _fit_score(service_type: str, preferred_types: list[str]) -> int:

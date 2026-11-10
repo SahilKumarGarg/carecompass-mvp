@@ -14,7 +14,7 @@ This file provides guidance to agents when working with code in this repository.
 # Single test by name
 .venv\Scripts\pytest.exe tests/test_safety.py -v -k "test_empty_string_returns_routine"
 
-# Benchmark only (slow, runs all 17 scenarios)
+# Benchmark only (runs all 47 scenarios)
 .venv\Scripts\pytest.exe tests/test_benchmark.py -v -s
 
 # Run the app
@@ -27,7 +27,7 @@ This file provides guidance to agents when working with code in this repository.
 
 - **Safety logic is plain Python reading JSON config** — never implement red-flag rules only in a prompt.
 - **Emergency path must work with zero LLM + zero network** — always. Emergency exit is in [`orchestrator.py`](src/orchestrator.py) before any LLM call.
-- **Never invent services, phone numbers, or opening hours** — every fact must come from [`data/services.json`](data/services.json).
+- **Never invent hospital facts, phone numbers, or opening hours** — every fact shown to the user must come from [`data/hospitals_clean.csv`](data/hospitals_clean.csv) (hospitals_us path) or [`data/services.json`](data/services.json) (DATA_SOURCE=demo).
 - **No diagnosis, conditions, medicines, or treatments** — enforced by [`checks.py:final_check()`](src/checks.py) against [`data/banned_phrases.json`](data/banned_phrases.json). Add new banned phrases there, not in code.
 - **Demo data only** — all `data/*.json` files carry `"demo_data": true`. Never use real personal data.
 - **Secrets in `.env`** (never committed) — see [`.env.example`](.env.example) for `WATSONX_*` and `EMERGENCY_NUMBER` keys.
@@ -43,7 +43,7 @@ describe → understand → safety → find → compare → final_check (≤2 re
 
 - **Safety fires before any LLM call.** `emergency` tier exits immediately (no candidates, no LLM).
 - `check_red_flags()` in [`src/safety.py`](src/safety.py) is purely deterministic: reads [`data/red_flags.json`](data/red_flags.json), applies phrase match + term_groups conjunction match.
-- `final_check()` in [`src/checks.py`](src/checks.py) runs 6 checks: service IDs, service names, phones, banned phrases, last_verified date, urgent language. Fails → revise up to 2 times, then sets `needs_human_review=True`.
+- `final_check()` in [`src/checks.py`](src/checks.py) runs 13 checks total: 7 hospitals_us checks (ID existence, name/phone/val_year in answer, call-ahead line, no forbidden claims, no closed types) or 6 demo checks (service ID/name/phone, last_verified date) — plus banned-phrase and urgent-advice checks that always run. Fails → revise up to 2 times, then sets `needs_human_review=True`.
 
 ## Red-flag rule format (`data/red_flags.json`)
 
@@ -56,7 +56,7 @@ Each rule has `id`, `name`, `tier` (`emergency` or `urgent`), optional `phrases`
 
 ## Code style
 
-- Python 3.14, type hints throughout, short module docstrings.
+- Python 3.14.5 (tested), type hints throughout, short module docstrings.
 - `from __future__ import annotations` at top of every `src/` file.
 - Imports: stdlib → then `from src.module import ...` (no `import src.module`).
 - Modules capped at ~200 lines.
@@ -68,7 +68,7 @@ Each rule has `id`, `name`, `tier` (`emergency` or `urgent`), optional `phrases`
 
 - Test files mirror source: `tests/test_<module>.py`.
 - Test classes group by unit; parametrize over scenario IDs from `data/scenarios.json` where applicable.
-- Benchmark (`tests/test_benchmark.py`) runs all 17 scenarios offline. **Under-triage = hard test failure. Over-triage = allowed (just reported).**
+- Benchmark (`tests/test_benchmark.py`) runs all 47 scenarios offline. **Under-triage = hard test failure. Over-triage = allowed (just reported).**
 - Scenarios with `expected_red_flag_id: null` still have an `expected_tier` — the benchmark checks tiers even when no specific rule ID is pinned.
 - `test_safety.py` uses scenarios; `test_safety_v2.py` tests term_groups, paraphrases, and negation exhaustively.
 

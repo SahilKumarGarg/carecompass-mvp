@@ -33,6 +33,9 @@ import pytest
 for _k in ("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"):
     os.environ.pop(_k, None)
 
+# Force hospitals_us data source for the benchmark.
+os.environ.setdefault("DATA_SOURCE", "hospitals_us")
+
 from src.audit import BENCHMARK_FILE, log_benchmark  # noqa: E402
 from src.orchestrator import SessionResult, run_session  # noqa: E402
 
@@ -75,9 +78,34 @@ class ScenarioOutcome:
 # ---------------------------------------------------------------------------
 
 def _top_service_type(result: SessionResult) -> Optional[str]:
-    """Return the type of the top (rank-1) non-fallback service, or None."""
+    """Return the type of the top (rank-1) non-fallback service/hospital, or None.
+
+    Supports both RankedResult (.service) and RankedHospital (.hospital).
+    For hospitals_us path, hospital type is the raw CSV TYPE string; we map
+    the CSV type to the demo service-type vocabulary for scenario comparison
+    so that existing acceptable_service_types lists are still usable.
+    """
     top = [r for r in result.ranked if not r.is_fallback]
-    return top[0].service.type if top else None
+    if not top:
+        return None
+    r0 = top[0]
+    # hospitals_us path → RankedHospital
+    hosp = getattr(r0, "hospital", None)
+    if hosp is not None:
+        # Map CSV hospital TYPE to demo service-type vocabulary.
+        htype = hosp.type.upper()
+        if htype in ("GENERAL ACUTE CARE", "CRITICAL ACCESS"):
+            return "hospital_emergency"
+        if htype == "PSYCHIATRIC":
+            return "specialist"
+        if htype == "CHILDREN":
+            return "hospital_emergency"
+        if htype == "WOMEN":
+            return "hospital_emergency"
+        return "hospital_emergency"  # default for any other acute type
+    # demo path → RankedResult
+    svc = getattr(r0, "service", None)
+    return svc.type if svc is not None else None
 
 
 # ---------------------------------------------------------------------------

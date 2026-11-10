@@ -1,6 +1,9 @@
 # CareCompass — Architecture
 
-> **Demo application.** All data is synthetic. Not for clinical use.
+> **Not for clinical use.** This application uses a public US hospitals dataset
+> (Kaggle — [US Hospitals by andrewmvd](https://www.kaggle.com/datasets/andrewmvd/us-hospitals)).
+> Records were validated between 2013 and 2022; phone numbers and services may be out of
+> date. The dataset has no emergency-department field and no opening-hours field.
 
 ---
 
@@ -26,10 +29,14 @@ Browser (Streamlit)
         │         ├─ emergency → build answer → RETURN (steps 4-8 skipped)
         │         └─ urgent / routine → continue
         │
-        ├─ 4. find   finder.find_services()
-        │         ├─ map concern → preferred service types  (care_levels.json)
-        │         ├─ filter services.json by area + type
-        │         └─ compute haversine distance from area_centres.json
+        ├─ 4. find   finder.find_hospitals() [hospitals_us] / finder.find_services() [demo]
+        │         ├─ [hospitals_us] locations.resolve_location() → candidate hospital rows
+        │         │     └─ widens ZIP→city→county→state if needed; notice returned
+        │         ├─ [hospitals_us] filter by facility type for case (type_fit 3/2/1)
+        │         ├─ [demo] map concern → preferred service types  (care_levels.json)
+        │         ├─ [demo] filter services.json by area + type
+        │         └─ compute haversine distance (miles from ref point [hospitals_us] /
+        │                                        km from area centre [demo])
         │
         ├─ 5. compare  advisor.rank()
         │         └─ score each candidate (fit + distance + open + freshness)
@@ -98,18 +105,54 @@ Extracts a structured [`CaseResult`](../src/intake.py) from free-form text.
 Concern budget: 200 characters of the user's own words (duration words preserved — W8-5).
 Up to 2 follow-up questions are generated for missing fields (`who`, `concern`, `duration`).
 
+### [`src/locations.py`](../src/locations.py)
+
+Geographic lookups against `data/hospitals_clean.csv`. Used by the `hospitals_us` path.
+
+- **`list_states()`** — sorted list of two-letter state codes in the dataset (used by the
+  State dropdown).
+- **`list_counties(state)`** — sorted `(county_name, countyfips)` pairs for a state.
+- **`list_cities(state, county)`** — sorted city names, optionally scoped to a county.
+- **`resolve_location(state, county, city, zip)`** — returns a `LocationResult` containing
+  matching hospital rows and a reference point (mean lat/lon). Resolves at the most
+  specific level supplied and automatically widens (ZIP → city → county → state) when no
+  rows are found. Widening is never silent: `notice` carries a human-readable explanation.
+  Raises `ValueError` when no hospitals match even at the broadest level.
+
+State is always required in every sub-query to prevent mixing hospitals from different
+states that share a city or county name.
+
 ### [`src/finder.py`](../src/finder.py)
 
-1. **`map_to_service_types(concern, tier, safety_hits)`** — maps the concern string and
-   safety rule hits to an ordered list of preferred service types using keywords from
-   `data/care_levels.json`. Service-type hints on red-flag rules (e.g. RF008 →
-   `hospital_emergency`, RF009 → `specialist`) are promoted to the front of the list.
-2. **`find_services(case, tier, safety_hits)`** — filters `data/services.json` by area and
-   type, computes Haversine distance from `data/area_centres.json`, and returns
-   `ServiceCandidate` objects.
+The module checks `DATA_SOURCE` (env var) at call time:
 
-Haversine formula provides straight-line distance in km. Travel time is estimated at
-25 km/h (walking/slow traffic pace) and explicitly labelled as an estimate in the UI.
+| `DATA_SOURCE` | Path used |
+|---|---|
+| `hospitals_us` (default) | `data/hospitals_clean.csv` via `find_hospitals()` |
+| `demo` | `data/services.json` via `find_services()` |
+
+**`hospitals_us` path — `find_hospitals(ref_lat, ref_lon, case, tier, candidate_rows)`**
+
+Receives pre-filtered hospital rows from `locations.resolve_location()`, applies type
+filtering (excludes `MILITARY`, `LONG TERM CARE`, `REHABILITATION`, `CHRONIC DISEASE`,
+`SPECIAL`), and returns `HospitalCandidate` objects. Type fit is scored 3/2/1:
+
+| Concern type | Primary (3) | Secondary (2) |
+|---|---|---|
+| Mental health / self-harm | `PSYCHIATRIC` | `GENERAL ACUTE CARE` |
+| Child patient | `CHILDREN` | `GENERAL ACUTE CARE` |
+| Pregnancy / obstetric | `GENERAL ACUTE CARE` | `WOMEN` |
+| Emergency / urgent / routine | `GENERAL ACUTE CARE` | `CRITICAL ACCESS` |
+
+Distance is in **miles** at 40 mph estimated travel speed. `val_year` (the 4-digit
+validation year from `VAL_DATE`) is always carried on the candidate.
+
+**`demo` path — `find_services(case, tier, safety_hits)`**
+
+Filters `data/services.json` by area and type; computes Haversine distance in **km** at
+25 km/h from `data/area_centres.json`; returns `ServiceCandidate` objects. Service-type
+hints on red-flag rules (e.g. RF008 → `hospital_emergency`, RF009 → `specialist`) are
+promoted to the front of the preferred-types list.
 
 ### [`src/advisor.py`](../src/advisor.py)
 
@@ -212,7 +255,28 @@ preferred-type list so the service search is biased toward the right kind of car
 
 ---
 
-## Demo services (20 total, 4 per area)
+## Dataset summary (hospitals_us path)
+
+The active dataset is `data/hospitals_clean.csv`, generated from the Kaggle US Hospitals
+dataset by `scripts/prepare_hospitals.py`.
+
+**Key limitations carried through to the UI:**
+
+| Limitation | Detail |
+|---|---|
+| Validation years | `VAL_DATE` ranges from **2013 to 2022**; some records will be outdated |
+| No ED field | The source has no `has_emergency_department` column; `TYPE` is used as proxy |
+| No opening-hours field | Hours of operation are not in the source; users must call ahead |
+| US-only | Coverage limited to US facilities; overseas territories may be incomplete |
+| Demo/test mode | `DATA_SOURCE=demo` uses `data/services.json` (20 synthetic services, 5 areas) |
+
+See [`docs/DATA.md`](DATA.md) for the full column dictionary and all cleaning rules applied
+by the preparation script.
+
+## Demo services (`DATA_SOURCE=demo`, 20 total, 4–5 per area)
+
+The demo directory (`data/services.json`) is used when `DATA_SOURCE=demo` and by the
+existing test suite. All names, phones, and addresses are **invented**.
 
 | Area | ID | Name | Type | 24h |
 |---|---|---|---|---|
@@ -274,8 +338,9 @@ All configuration is via environment variables read at runtime from `.env`:
 | `WATSONX_API_KEY` | watsonx.ai authentication | (blank) → offline mode |
 | `WATSONX_URL` | watsonx.ai service URL | (blank) → offline mode |
 | `WATSONX_PROJECT_ID` | watsonx.ai project | (blank) → offline mode |
-| `EMERGENCY_NUMBER` | Number shown in emergency/urgent messages | `[DEMO-999]` |
-| `EMERGENCY_REGION` | Region label in urgent body message | `DEMO REGION` |
+| `EMERGENCY_NUMBER` | Number shown in emergency/urgent messages | `911` |
+| `EMERGENCY_REGION` | Region label in urgent body message | `US` |
+| `DATA_SOURCE` | `hospitals_us` (real dataset) or `demo` (synthetic services) | `hospitals_us` |
 
 `_emergency_number()` and `_emergency_region()` in `orchestrator.py` strip whitespace
 and fall back to the demo defaults for blank strings as well as absent variables.

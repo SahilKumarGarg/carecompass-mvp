@@ -1,4 +1,9 @@
-"""Tests for src/orchestrator.py — no Streamlit, no LLM, no network."""
+"""Tests for src/orchestrator.py — no Streamlit, no LLM, no network.
+
+These tests run under DATA_SOURCE=demo so that area strings like "Riverside"
+are valid (they are named areas in data/services.json). The hospitals_us path
+is validated by test_locations.py and test_benchmark.py.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +15,9 @@ import pytest
 # Ensure offline mode.
 for _k in ("WATSONX_API_KEY", "WATSONX_URL", "WATSONX_PROJECT_ID"):
     os.environ.pop(_k, None)
+
+# Use demo data source so existing area strings (Riverside, Greenfield etc.) work.
+os.environ["DATA_SOURCE"] = "demo"
 
 from src.orchestrator import (  # noqa: E402
     SessionResult,
@@ -152,7 +160,11 @@ class TestRoutinePath:
         result = _run("I need a repeat prescription.", area="Greenfield")
         if result.ranked and not result.needs_human_review:
             top = result.ranked[0]
-            assert top.service.last_verified in result.answer_text
+            # demo path uses .service; hospitals_us path uses .hospital
+            svc = getattr(top, "service", None) or getattr(top, "hospital", None)
+            val = getattr(svc, "last_verified", None) or getattr(svc, "val_year", None)
+            if val:
+                assert val in result.answer_text
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,11 @@
 """Advisor module: rank service candidates and build recommendations.
 
-Scores on fit, distance, open status and data freshness.
-Urgent cases weight distance and open status more heavily.
+Two paths:
+- hospitals_us: ranks HospitalCandidate objects from finder.find_hospitals().
+  Scores on type_fit, trauma level, distance and beds. No date-based freshness
+  penalty; validation year is always carried. Urgent cases weight distance more.
+- demo: ranks ServiceCandidate objects (original behaviour).
+
 Reasons are built from record fields only; optionally reworded by an LLM.
 """
 
@@ -12,10 +16,10 @@ import datetime
 import os
 from typing import Optional
 
-from src.finder import ServiceCandidate
+from src.finder import HospitalCandidate, ServiceCandidate
 
 # ---------------------------------------------------------------------------
-# Scoring weights
+# Scoring weights — demo path
 # ---------------------------------------------------------------------------
 
 # Weights for (fit, distance, open_now, freshness).
@@ -26,14 +30,44 @@ _MAX_DISTANCE_KM = 10.0   # beyond this, distance score is 0
 _FRESHNESS_DAYS = 90      # data older than this scores 0 on freshness
 _STALE_DAYS = 60          # threshold: show "call ahead" warning + extra ranking penalty
 
+# ---------------------------------------------------------------------------
+# Scoring weights — hospitals_us path
+# ---------------------------------------------------------------------------
+
+# Weights for (type_fit, trauma, distance, beds).
+# Urgent weights distance more; routine weights type_fit more.
+_H_WEIGHTS_ROUTINE: tuple[float, float, float, float] = (0.40, 0.15, 0.30, 0.15)
+_H_WEIGHTS_URGENT:  tuple[float, float, float, float] = (0.30, 0.20, 0.40, 0.10)
+
+_MAX_DISTANCE_MILES = 50.0   # beyond this, distance score is 0
+_MAX_BEDS = 600              # normalisation ceiling for bed count score
+
+# Approved routine-only advisory line (verbatim).
+_ROUTINE_ADVISORY = (
+    "This does not look like an emergency. "
+    "A primary care clinic or pharmacy may be a better first step; "
+    "these hospitals are nearby if symptoms get worse."
+)
+
+# Forbidden phrases we must never claim in hospital reasons.
+_NO_CLAIM_PHRASES = (
+    "emergency department",
+    "emergency room",
+    "24-hour",
+    "24 hour",
+    "open 24",
+    "opening hours",
+    "open hours",
+)
+
 
 # ---------------------------------------------------------------------------
-# Output schema
+# Output schema — demo path
 # ---------------------------------------------------------------------------
 
 @dataclasses.dataclass
 class RankedResult:
-    """A ranked recommendation."""
+    """A ranked recommendation (demo path)."""
 
     rank: int                         # 1 = top recommendation, 4 = fallback
     service: ServiceCandidate
@@ -43,7 +77,22 @@ class RankedResult:
 
 
 # ---------------------------------------------------------------------------
-# Scoring helpers
+# Output schema — hospitals_us path
+# ---------------------------------------------------------------------------
+
+@dataclasses.dataclass
+class RankedHospital:
+    """A ranked hospital recommendation (hospitals_us path)."""
+
+    rank: int                         # 1 = top recommendation, 4 = fallback
+    hospital: HospitalCandidate
+    score: float                      # composite 0.0–1.0
+    reason: str                       # from record fields only
+    is_fallback: bool
+
+
+# ---------------------------------------------------------------------------
+# Scoring helpers — demo path
 # ---------------------------------------------------------------------------
 
 def _score_fit(candidate: ServiceCandidate) -> float:
@@ -108,7 +157,7 @@ def _composite_score(candidate: ServiceCandidate, tier: str) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Reason builder — facts from record fields only
+# Reason builder — demo path, facts from record fields only
 # ---------------------------------------------------------------------------
 
 def _build_reason_template(candidate: ServiceCandidate) -> str:
@@ -142,6 +191,121 @@ def _build_reason_template(candidate: ServiceCandidate) -> str:
 
     return " ".join(parts)
 
+
+# ---------------------------------------------------------------------------
+# Scoring helpers — hospitals_us path
+# ---------------------------------------------------------------------------
+
+_TRAUMA_ORDER = {
+    "LEVEL I": 5,
+    "LEVEL I ADULT": 5,
+    "LEVEL I PEDIATRIC": 5,
+    "LEVEL I ADULT, LEVEL I PEDIATRIC": 5,
+    "LEVEL I ADULT, LEVEL II PEDIATRIC": 4,
+    "LEVEL II": 4,
+    "LEVEL II ADULT": 4,
+    "LEVEL II PEDIATRIC": 4,
+    "LEVEL II ADULT, LEVEL II PEDIATRIC": 4,
+    "LEVEL II, LEVEL II PEDIATRIC": 4,
+    "LEVEL I, LEVEL II PEDIATRIC": 4,
+    "LEVEL I, LEVEL I PEDIATRIC": 5,
+    "LEVEL II / PEDIATRIC": 4,
+    "LEVEL III": 3,
+    "LEVEL III ADULT": 3,
+    "LEVEL IV": 2,
+    "LEVEL V": 1,
+}
+_TRAUMA_MAX = 5
+
+
+def _score_hospital_trauma(hospital: HospitalCandidate) -> float:
+    """Return 0.0–1.0 based on trauma designation level; 0 if no trauma."""
+    trauma = hospital.trauma.strip().upper()
+    level = _TRAUMA_ORDER.get(trauma, 0)
+    return level / _TRAUMA_MAX
+
+
+def _score_hospital_distance(hospital: HospitalCandidate) -> float:
+    """Closer = higher score; 0 beyond _MAX_DISTANCE_MILES."""
+    if hospital.distance_miles is None:
+        return 0.0
+    clamped = min(hospital.distance_miles, _MAX_DISTANCE_MILES)
+    return 1.0 - (clamped / _MAX_DISTANCE_MILES)
+
+
+def _score_hospital_beds(hospital: HospitalCandidate) -> float:
+    """More beds = higher score up to _MAX_BEDS; 0 if unknown."""
+    if hospital.beds is None:
+        return 0.0
+    return min(hospital.beds / _MAX_BEDS, 1.0)
+
+
+def _score_hospital_type_fit(hospital: HospitalCandidate) -> float:
+    """Normalise type_fit (0–3) to 0.0–1.0."""
+    return hospital.type_fit / 3.0
+
+
+def _composite_score_hospital(hospital: HospitalCandidate, tier: str) -> float:
+    """Return a weighted composite score for a hospital candidate."""
+    weights = _H_WEIGHTS_URGENT if tier == "urgent" else _H_WEIGHTS_ROUTINE
+    w_fit, w_trauma, w_dist, w_beds = weights
+    return (
+        w_fit    * _score_hospital_type_fit(hospital)
+        + w_trauma * _score_hospital_trauma(hospital)
+        + w_dist   * _score_hospital_distance(hospital)
+        + w_beds   * _score_hospital_beds(hospital)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reason builder — hospitals_us path, facts from record fields only
+# ---------------------------------------------------------------------------
+
+def _build_hospital_reason(hospital: HospitalCandidate, tier: str, is_routine: bool) -> str:
+    """Build a reason string from hospital record fields only.
+
+    Rules:
+    - Never claim an emergency department, 24-hour service or opening hours.
+    - Always carry the validation year.
+    - Tell the user to call ahead.
+    - Routine cases include the approved advisory line.
+    """
+    parts: list[str] = []
+
+    name = hospital.display_name or hospital.name.title()
+    parts.append(f"{name} is approximately {hospital.distance_miles:.1f} miles away")
+    if hospital.travel_min_estimate is not None:
+        parts.append(
+            f"(estimated {hospital.travel_min_estimate:.0f} min travel at 40 mph — estimate only)."
+        )
+    else:
+        parts.append(".")
+
+    parts.append(f"Type: {hospital.type.title()}.")
+
+    if hospital.trauma:
+        parts.append(f"Trauma designation: {hospital.trauma}.")
+
+    if hospital.beds:
+        parts.append(f"Bed count: {hospital.beds}.")
+
+    parts.append(f"Address: {hospital.address}, {hospital.city}, {hospital.state} {hospital.zip}.")
+
+    if hospital.val_year:
+        parts.append(f"Validation year: {hospital.val_year}.")
+
+    parts.append("Call ahead to confirm availability before attending.")
+    parts.append(f"Phone: {hospital.phone}.")
+
+    if is_routine:
+        parts.append(_ROUTINE_ADVISORY)
+
+    return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# LLM reword (demo path only)
+# ---------------------------------------------------------------------------
 
 def _reword_reason_llm(reason: str, candidate: ServiceCandidate) -> str:
     """Attempt to reword the reason using watsonx.ai.  Falls back to template on any error."""
@@ -183,7 +347,7 @@ def _watsonx_available() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Public API — demo path
 # ---------------------------------------------------------------------------
 
 def rank(candidates: list[ServiceCandidate], tier: str) -> list[RankedResult]:
@@ -223,6 +387,55 @@ def rank(candidates: list[ServiceCandidate], tier: str) -> list[RankedResult]:
             rank=rank_pos,
             service=candidate,
             score=round(_composite_score(candidate, tier), 4),
+            reason=reason,
+            is_fallback=is_fallback,
+        ))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Public API — hospitals_us path
+# ---------------------------------------------------------------------------
+
+def rank_hospitals(
+    hospitals: list[HospitalCandidate],
+    tier: str,
+) -> list[RankedHospital]:
+    """Rank hospital candidates and return top 3 + one fallback (4 total).
+
+    Scores on type_fit, trauma designation, distance and bed count.
+    Urgent tier weights distance more. No date-based freshness penalty;
+    validation year is always carried in the reason.
+
+    For routine tier, the approved advisory line is appended to each reason.
+
+    Args:
+        hospitals: HospitalCandidate list from finder.find_hospitals.
+        tier: Safety tier — "emergency" | "urgent" | "routine".
+
+    Returns:
+        Up to 4 RankedHospital items.  Position 4 (is_fallback=True) is the
+        fallback.  May be fewer if fewer candidates are provided.
+    """
+    if not hospitals:
+        return []
+
+    scored = sorted(
+        hospitals,
+        key=lambda h: _composite_score_hospital(h, tier),
+        reverse=True,
+    )
+
+    is_routine = tier == "routine"
+    results: list[RankedHospital] = []
+    for i, hospital in enumerate(scored[:4]):
+        is_fallback = i == 3
+        reason = _build_hospital_reason(hospital, tier, is_routine)
+        results.append(RankedHospital(
+            rank=i + 1,
+            hospital=hospital,
+            score=round(_composite_score_hospital(hospital, tier), 4),
             reason=reason,
             is_fallback=is_fallback,
         ))

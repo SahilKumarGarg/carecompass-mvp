@@ -56,13 +56,28 @@ def _flags(inp: dict, result) -> list[str]:
     for bh in banned_hits:
         problems.append(f"BANNED PHRASE: {bh}")
 
-    # Any ranked option missing a last_verified date
+    # hospitals_us path: any ranked option missing val_year or call-ahead
     for r in result.ranked:
-        svc = r.service
-        if not getattr(svc, "last_verified", None):
+        hosp = getattr(r, "hospital", None)
+        svc  = getattr(r, "service", None) if hosp is None else None
+        rec  = hosp or svc
+        if rec is None:
+            continue
+        # val_year (hospitals_us) or last_verified (demo)
+        val = getattr(rec, "val_year", None) or getattr(rec, "last_verified", None)
+        if not val:
             problems.append(
-                f"NO LAST_VERIFIED: {svc.name} ({svc.id})"
+                f"NO VAL_YEAR/LAST_VERIFIED: {getattr(rec, 'name', '?')} ({getattr(rec, 'id', '?')})"
             )
+        # hospitals_us: check call-ahead present in reason
+        if hosp is not None and "call ahead" not in r.reason.lower():
+            problems.append(
+                f"NO CALL_AHEAD: {getattr(hosp, 'display_name', hosp.name)} ({hosp.id})"
+            )
+
+    # Widening notice — report it as informational (not a flag)
+    if result.location is not None and result.location.notice:
+        problems.append(f"INFO: widened from {result.location.widened_from} to {result.location.widened_to}")
 
     return problems
 
@@ -71,17 +86,27 @@ def _format_options(result) -> list[str]:
     """Return one display line per ranked result."""
     lines: list[str] = []
     for r in result.ranked:
-        svc = r.service
-        dist = (
-            f"{svc.distance_km:.1f} km (~{svc.travel_min_estimate:.0f} min)"
-            if svc.distance_km is not None
-            else "online (no travel)"
-        )
+        hosp = getattr(r, "hospital", None)
+        svc  = getattr(r, "service", None) if hosp is None else None
+        rec  = hosp or svc
+        if rec is None:
+            continue
+        name = getattr(rec, "display_name", None) or getattr(rec, "name", "?")
+        dist_mi = getattr(rec, "distance_miles", None)
+        dist_km = getattr(rec, "distance_km",    None)
+        travel  = getattr(rec, "travel_min_estimate", None)
+        if dist_mi is not None:
+            dist = f"{dist_mi:.1f} mi (~{travel:.0f} min)" if travel else f"{dist_mi:.1f} mi"
+        elif dist_km is not None:
+            dist = f"{dist_km:.1f} km (~{travel:.0f} min)" if travel else f"{dist_km:.1f} km"
+        else:
+            dist = "online (no travel)"
+        val = getattr(rec, "val_year", None) or getattr(rec, "last_verified", "MISSING")
         fallback_tag = " [fallback]" if r.is_fallback else f" score={r.score:.3f}"
         lines.append(
-            f"  #{r.rank}{fallback_tag}  {svc.name} ({svc.id})"
+            f"  #{r.rank}{fallback_tag}  {name} ({getattr(rec, 'id', '?')})"
             f"  dist={dist}"
-            f"  verified={svc.last_verified or 'MISSING'}"
+            f"  verified={val}"
         )
     return lines
 
@@ -142,6 +167,11 @@ def main() -> None:
             handoff_offered = (
                 result.state == "present" and not result.needs_human_review
             )
+            widening_notice = (
+                result.location.notice
+                if result.location and result.location.notice
+                else None
+            )
             flags = _flags(inp, result)
             if crash_msg:
                 flags.insert(0, crash_msg)
@@ -154,9 +184,13 @@ def main() -> None:
             check_ok = False
             fc_problems = []
             handoff_offered = False
+            widening_notice = None
             flags = [crash_msg or "CRASH (unknown)"]
 
-        has_flags = bool(flags)
+        # Separate real flags from INFO lines
+        real_flags = [f for f in flags if not f.startswith("INFO:")]
+        info_lines = [f for f in flags if f.startswith("INFO:")]
+        has_flags = bool(real_flags)
         flag_icon = "⚠️" if has_flags else "✅"
 
         # ── Markdown section ──────────────────────────────────────────────
@@ -170,6 +204,9 @@ def main() -> None:
             f"**Expected tier:** {expected_tier or '(none)'}  "
             f"**Actual tier:** {tier_icon} {tier}\n"
         )
+
+        if widening_notice:
+            md_lines.append(f"**ℹ️ Widening notice:** {widening_notice}  \n")
 
         if rule_hits:
             md_lines.append("**Rule hits:**")
@@ -191,9 +228,15 @@ def main() -> None:
         else:
             md_lines.append("**Options shown:** none (emergency path or no candidates)\n")
 
-        if flags:
+        if info_lines:
+            md_lines.append("**ℹ️ Info:**")
+            for il in info_lines:
+                md_lines.append(f"- {il[5:].strip()}")  # strip "INFO:"
+            md_lines.append("")
+
+        if real_flags:
             md_lines.append("**⚠️ FLAGS:**")
-            for f in flags:
+            for f in real_flags:
                 md_lines.append(f"- {f}")
             md_lines.append("")
 
@@ -210,7 +253,7 @@ def main() -> None:
             "check":    "✅" if check_ok else "❌",
             "handoff":  "Yes" if handoff_offered else "No",
             "ms":       f"{elapsed_ms:.0f}",
-            "flags":    "; ".join(flags) if flags else "—",
+            "flags":    "; ".join(real_flags) if real_flags else "—",
         })
 
     # ── Summary table in markdown ─────────────────────────────────────────

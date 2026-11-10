@@ -1,6 +1,11 @@
 # CareCompass — Safety, Governance, and Testing
 
-> **Demo application.** All data is synthetic. Not for clinical use.
+> **Not for clinical use.** This application uses a public US hospitals dataset
+> (Kaggle — [US Hospitals by andrewmvd](https://www.kaggle.com/datasets/andrewmvd/us-hospitals)).
+> Records were validated between 2013 and 2022; phone numbers and services may be out of
+> date. The dataset has no emergency-department field and no opening-hours field. Users must
+> call ahead to confirm a facility is open and appropriate before travelling.
+> This app does not provide medical advice.
 
 This document covers:
 1. [Safety guarantees](#1-safety-guarantees)
@@ -29,7 +34,7 @@ are never reached.
 
 This is enforced structurally: the emergency exit branch sits at the top of
 `run_session()` before any LLM or network call. Tests in `TestOfflineEmergency`
-(647 total, 22 in that class) verify this for all 7 emergency rule families.
+(952 total, 22 in that class) verify this for all 7 emergency rule families.
 
 ### 1.2 Under-triage is a hard test failure
 
@@ -56,10 +61,11 @@ side of caution. The benchmark reports over-triage counts but does not fail on t
 
 ### 1.3 No service fact can be invented
 
-`final_check` verifies that every service ID, name, and phone number cited in an answer
-exists verbatim in `data/services.json` before the answer is shown. If verification
-fails, the answer is revised and re-checked up to 2 times. On persistent failure the
-human-review notice is shown instead.
+`final_check` verifies that every hospital ID, name, and phone number cited in an answer
+exists in `data/hospitals_clean.csv` (hospitals_us path) or `data/services.json`
+(DATA_SOURCE=demo) before the answer is shown. If verification fails, the answer is
+revised and re-checked up to 2 times. On persistent failure the human-review notice is
+shown instead.
 
 ### 1.4 Typo resilience: correct keywords, misspelled context
 
@@ -178,17 +184,29 @@ The summary does not include the user's raw typed message or any diagnosis langu
 `test_handoff_summary_does_not_contain_diagnosis` in `TestConsentGate` runs
 `_check_banned_phrases` against the summary to verify this.
 
-### Demo data guarantee
+### Dataset and data currency
 
-Every data file carries `"demo_data": true` at the root. No real patient data, no real
-service records, no real phone numbers. The `AGENTS.md` rule forbids committing real
-personal data.
+The application uses the Kaggle US Hospitals dataset (`data/hospitals_clean.csv`). Key
+properties relevant to governance:
+
+- Records were validated between **2013 and 2022**. Phone numbers, facility names, and
+  listed services may have changed.
+- The dataset has **no emergency-department field**. The app uses facility type
+  (`GENERAL ACUTE CARE`, `CRITICAL ACCESS`) as a proxy. Not every recommended hospital
+  will have an ED.
+- The dataset has **no opening-hours field**. The app cannot determine whether a facility
+  is currently open. Users must call ahead.
+- When `DATA_SOURCE=demo`, the app uses `data/services.json` (20 synthetic services with
+  invented names, phones, and addresses). This mode is used by the test suite.
+- No real patient data is committed. The `AGENTS.md` rule forbids committing real personal
+  data.
 
 ### Secrets
 
-`WATSONX_API_KEY`, `WATSONX_URL`, `WATSONX_PROJECT_ID`, `EMERGENCY_NUMBER`, and
-`EMERGENCY_REGION` live in `.env` which is listed in `.gitignore`. `.env.example`
-provides a template with all values blank.
+`WATSONX_API_KEY`, `WATSONX_URL`, `WATSONX_PROJECT_ID`, `EMERGENCY_NUMBER`,
+`EMERGENCY_REGION`, and `DATA_SOURCE` live in `.env` which is listed in `.gitignore`.
+`.env.example` provides a template; the defaults are `EMERGENCY_NUMBER=911`,
+`EMERGENCY_REGION=US`, and `DATA_SOURCE=hospitals_us`.
 
 ---
 
@@ -268,7 +286,7 @@ also useful for single-term rules when you want negation awareness.
 | Layer | File(s) | Scope |
 |---|---|---|
 | **Unit** | `test_safety.py`, `test_safety_v2.py` | `check_red_flags` — scenarios, paraphrases, negation |
-| **Unit** | `test_checks.py` | Each of the 6 `final_check` sub-checks independently |
+| **Unit** | `test_checks.py` | Each of the 13 `final_check` sub-checks independently |
 | **Unit** | `test_finder.py` | Haversine formula, service filtering, distance |
 | **Unit** | `test_advisor.py` | Each scoring function, `rank`, reason builder, stale warning |
 | **Unit** | `test_intake.py` | Offline extraction (who, concern, duration, severity, denied symptoms), follow-up questions |
@@ -290,7 +308,7 @@ also useful for single-term rules when you want negation awareness.
 ### Running the full suite
 
 ```powershell
-# All 647 tests, fully offline, ~3.7 s
+# All 952 tests, fully offline
 .venv\Scripts\pytest.exe tests/ -v --tb=short
 
 # Benchmark with printed summary
@@ -340,8 +358,10 @@ over-triage — the user receives the more cautious response.
 | Gap | Risk | Current mitigation |
 |---|---|---|
 | Spelling-only misspellings miss rules | User types `"unconcious"` and gets `routine` tier | Red-team test `test_misspelled_unconscious_word_alone_stays_routine` documents and accepts this; multiple synonyms in rules reduce miss rate for common words |
-| Open-hours not parsed in real time | Service scored 0.5 on availability even if closed | Distance and type-fit dominate the score; users are advised to call ahead; stale data triggers a "call ahead" warning |
+| Hospital data may be out of date | Records validated 2013–2022; phone numbers and services may have changed | The app shows the validation year on every card; users are explicitly advised to call ahead |
+| No emergency-department field | Recommended hospitals may not have an ED | Facility-type filtering (`GENERAL ACUTE CARE`, `CRITICAL ACCESS`) provides a best-effort proxy; the UI and user guide note this limitation |
+| No opening-hours field | App cannot determine whether a facility is currently open | Users are advised to call ahead; the limitation is documented in the UI, user guide, and README |
 | LLM reword path not independently validated | Reworded reason could contain interpretive language | `final_check` catches banned phrases in the full answer text after rewording; `guardrails=False` is used only for the reason reword (not for intake in a live scenario) |
 | Follow-up questions not surfaced in UI | Missing `who` or `duration` fields reduce intake quality | `missing_fields` is available on `SessionResult`; a future `app.py` update can display the question before running the pipeline |
-| 5 demo areas only | Unknown area returns no candidates → human-review notice | Acceptable for demo; a production build would use a real service directory |
+| Location widening may return distant hospitals | Widening from ZIP to state can yield hospitals far away | A notice is shown to the user when widening occurs; they can refine the location |
 | `final_check` revision is cosmetic | Appending a disclaimer doesn't fix a missing phone number | The disclaimer revision passes the urgent-advice marker check; structural failures (missing phone/name) still set `needs_human_review=True` which shows the escalation path |

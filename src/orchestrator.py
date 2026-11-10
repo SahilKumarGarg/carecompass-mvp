@@ -8,6 +8,19 @@ A failed final_check revises at most 2 times; on persistent failure returns
 a needs-human-review notice.
 
 All steps and decisions are written to logs/audit.jsonl via src.audit.
+
+DATA_SOURCE env var selects the data backend:
+  hospitals_us (default) — uses data/hospitals_clean.csv via locations.resolve_location.
+  demo                   — uses data/services.json (original behaviour).
+
+The area parameter to run_session is interpreted differently per source:
+  hospitals_us — expects a dict-like string encoded as JSON, or a plain string used
+                 as a free-form location hint (ZIP, city, or state).
+  demo         — area is a plain string area name matching data/services.json.
+
+For the hospitals_us path, area should be a JSON-encoded dict with optional keys:
+  {"state": "AL", "county": "COVINGTON", "city": "ANDALUSIA", "zip": "36420"}
+A plain string that parses as 5 digits is treated as a ZIP; otherwise as a city.
 """
 
 from __future__ import annotations
@@ -16,13 +29,14 @@ import dataclasses
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from src import audit
-from src.advisor import RankedResult, rank
+from src.advisor import RankedHospital, RankedResult, rank, rank_hospitals
 from src.checks import final_check
-from src.finder import ServiceCandidate, find_services
+from src.finder import HospitalCandidate, ServiceCandidate, find_hospitals, find_services
 from src.intake import CaseResult, extract_case, get_followup_question
+from src.locations import LocationResult, resolve_location
 from src.safety import SafetyResult, check_red_flags
 
 _MESSAGES_PATH = Path(__file__).parent.parent / "data" / "messages.json"
@@ -42,14 +56,15 @@ class SessionResult:
     state: str                             # final state reached
     case: Optional[CaseResult]            # None on emergency (no intake needed)
     safety: Optional[SafetyResult]
-    candidates: list[ServiceCandidate]
-    ranked: list[RankedResult]
+    candidates: Union[list[ServiceCandidate], list[HospitalCandidate]]
+    ranked: Union[list[RankedResult], list[RankedHospital]]
     answer_text: str                       # text shown to the user
     check_passed: bool
     needs_human_review: bool
     handoff_summary: Optional[str]        # set only after user consent
     followup_questions_asked: int
     missing_fields: list[str]
+    location: Optional[LocationResult]    # set when hospitals_us path is used
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +81,11 @@ def _load_messages() -> dict:
 # emergency contacts if .env is absent.
 _DEMO_EMERGENCY_NUMBER = "[DEMO-999]"
 _DEMO_EMERGENCY_REGION = "DEMO REGION"
+
+
+def _data_source() -> str:
+    """Return 'hospitals_us' (default) or 'demo' from the DATA_SOURCE env var."""
+    return os.environ.get("DATA_SOURCE", "hospitals_us").strip().lower()
 
 
 def _emergency_number() -> str:
@@ -87,8 +107,111 @@ def _fill_placeholders(text: str) -> str:
     )
 
 
+# Sentinel returned when a location string cannot be resolved without a state.
+_NO_STATE_SENTINEL = "__no_state__"
+
+
+def _parse_area_to_location(area: str) -> dict:
+    """Parse the area string into keyword arguments for resolve_location.
+
+    Accepts:
+    - JSON dict: {"state": "AL", "county": "COVINGTON", "city": "ANDALUSIA", "zip": "36420"}
+    - 5-digit string: treated as ZIP code (must include a state when possible, but
+      a ZIP alone is enough to identify a unique location so it is accepted)
+    - 2-letter state abbreviation: used as state filter.
+    - Anything else: only safe if it looks like a 5-digit ZIP; bare city or county
+      names without a state are rejected to prevent cross-state mixing.
+
+    Returns a dict suitable for **resolve_location().  Returns the sentinel dict
+    {"_no_state": True} when the input is a bare city/county name without a state,
+    so that run_session can surface a clear message asking the user to pick a state.
+    """
+    area = area.strip()
+    # Try JSON dict first.
+    if area.startswith("{"):
+        try:
+            parsed = json.loads(area)
+            kwargs = {k: v for k, v in parsed.items() if v}
+            # A JSON dict with only city/county and no state/zip is still unsafe.
+            if not kwargs.get("state") and not kwargs.get("zip"):
+                return {"_no_state": True}
+            return kwargs
+        except (json.JSONDecodeError, TypeError):
+            pass
+    # 5-digit ZIP — accepted without a state (ZIP is unambiguous).
+    if len(area) == 5 and area.isdigit():
+        return {"zip": area}
+    # Plain state abbreviation (2 letters).
+    if len(area) == 2 and area.isalpha():
+        return {"state": area.upper()}
+    # Any other plain string (bare city name, county name, etc.) has no state
+    # context — reject it to prevent cross-state mixing.
+    return {"_no_state": True}
+
+
+def _build_answer_text_hospitals(
+    ranked: list[RankedHospital],
+    tier: str,
+    location: Optional[LocationResult] = None,
+) -> str:
+    """Build the recommendation answer text from ranked hospital results.
+
+    Includes:
+    - A widening notice if the location was broadened.
+    - For urgent tier: the standard urgent header from messages.json.
+    - Each hospital: name, ID, phone, validation year, 'call ahead to confirm'.
+    - The reason text (which includes address, distance, type, val_year, call-ahead).
+    - Never claims emergency department, 24-hour service or opening hours.
+    """
+    messages = _load_messages()
+    lines: list[str] = []
+
+    # Widening notice — always shown when the location was broadened.
+    if location and location.notice:
+        lines.append(f"*ℹ️ {location.notice}*")
+        lines.append("")
+
+    if not ranked:
+        body = messages["needs_human_review"]["body"]
+        lines.append(_fill_placeholders(body))
+        return "\n".join(lines)
+
+    if tier == "urgent":
+        urgent_msg = messages["urgent"]
+        lines.append(urgent_msg["heading"])
+        lines.append(_fill_placeholders(urgent_msg["body"]))
+        lines.append(_fill_placeholders(urgent_msg["escalation_prompt"]))
+        lines.append("")
+
+    top = [r for r in ranked if not r.is_fallback]
+    fallback = next((r for r in ranked if r.is_fallback), None)
+
+    for r in top:
+        h = r.hospital
+        lines.append(
+            f"**Option {r.rank}: {h.display_name or h.name.title()}** ({h.id})  "
+            f"Phone: {h.phone}  "
+            f"Validation year: {h.val_year}"
+        )
+        lines.append("*Call ahead to confirm availability before attending.*")
+        lines.append(r.reason)
+        lines.append("")
+
+    if fallback:
+        h = fallback.hospital
+        lines.append(
+            f"**Fallback: {h.display_name or h.name.title()}** ({h.id})  "
+            f"Phone: {h.phone}  "
+            f"Validation year: {h.val_year}"
+        )
+        lines.append("*Call ahead to confirm availability before attending.*")
+        lines.append(fallback.reason)
+
+    return "\n".join(lines)
+
+
 def _build_answer_text(ranked: list[RankedResult], tier: str) -> str:
-    """Build the recommendation answer text from ranked results."""
+    """Build the recommendation answer text from ranked results (demo path)."""
     if not ranked:
         messages = _load_messages()
         body = messages["needs_human_review"]["body"]
@@ -131,7 +254,7 @@ def _build_answer_text(ranked: list[RankedResult], tier: str) -> str:
 def _build_handoff_summary(
     case: Optional[CaseResult],
     tier: str,
-    ranked: list[RankedResult],
+    ranked: Union[list[RankedResult], list[RankedHospital]],
 ) -> str:
     """Build a short handoff summary (only after explicit user consent)."""
     parts: list[str] = ["CareCompass – session summary (demo data only)\n"]
@@ -145,14 +268,25 @@ def _build_handoff_summary(
     if ranked:
         top = [r for r in ranked if not r.is_fallback]
         if top:
-            svc = top[0].service
-            parts.append(
-                f"Suggested service: {svc.name} (ID: {svc.id}) "
-                f"Phone: {svc.phone} "
-                f"Last verified: {svc.last_verified}"
-            )
+            r0 = top[0]
+            # Support both RankedHospital and RankedResult.
+            svc = getattr(r0, "hospital", None) or getattr(r0, "service", None)
+            if svc is not None:
+                name = getattr(svc, "display_name", None) or getattr(svc, "name", "")
+                phone = getattr(svc, "phone", "")
+                val = getattr(svc, "val_year", None) or getattr(svc, "last_verified", "")
+                sid = getattr(svc, "id", "")
+                parts.append(
+                    f"Suggested service: {name} (ID: {sid}) "
+                    f"Phone: {phone} "
+                    f"Last verified: {val}"
+                )
     parts.append("\nThis summary was generated by CareCompass (demo). Not medical advice.")
     return "\n".join(parts)
+
+
+def _collect_cited_ids_hospitals(ranked: list[RankedHospital]) -> list[str]:
+    return [r.hospital.id for r in ranked]
 
 
 def _collect_cited_ids(ranked: list[RankedResult]) -> list[str]:
@@ -178,16 +312,19 @@ def run_session(
 
     Args:
         user_text: Raw user input (may include follow-up answers appended).
-        area: The area selected by the user.
+        area: The area / location string selected by the user.
+              For hospitals_us: JSON dict or plain ZIP/city/state.
+              For demo: area name matching data/services.json.
         session_id: Optional existing session ID; a new UUID is created if None.
 
     Returns:
         SessionResult describing the final state and all intermediate results.
     """
     sid = session_id or audit.new_session_id()
+    source = _data_source()
 
     # ── Step 1: describe (already done by caller; log the input) ──────────
-    audit.log(sid, "describe", {"user_text": user_text, "area": area})
+    audit.log(sid, "describe", {"user_text": user_text, "area": area, "data_source": source})
 
     # ── Step 2: understand ────────────────────────────────────────────────
     case = extract_case(user_text, area)
@@ -233,9 +370,151 @@ def run_session(
             handoff_summary=None,
             followup_questions_asked=0,
             missing_fields=case.missing_fields,
+            location=None,
         )
 
     # ── Step 4: find ──────────────────────────────────────────────────────
+    location: Optional[LocationResult] = None
+
+    if source == "hospitals_us":
+        loc_kwargs = _parse_area_to_location(area)
+        if loc_kwargs.get("_no_state"):
+            # The area string is a bare city or county name without a state.
+            # Return a clear message asking the user to choose a state rather
+            # than silently querying hospitals across every state.
+            messages = _load_messages()
+            no_state_msg = messages.get(
+                "no_state_in_area",
+                "Please choose a state from the dropdown so we can find hospitals "
+                "near you. A city or county name alone is not specific enough — "
+                "the same name can appear in many states.",
+            )
+            audit.log(sid, "location_error", {"error": "no_state_in_area", "area": area})
+            return SessionResult(
+                session_id=sid,
+                tier=safety_result.tier,
+                state="no_state",
+                case=case,
+                safety=safety_result,
+                candidates=[],
+                ranked=[],
+                answer_text=no_state_msg,
+                check_passed=False,
+                needs_human_review=False,
+                handoff_summary=None,
+                followup_questions_asked=1 if followup_q else 0,
+                missing_fields=case.missing_fields,
+                location=None,
+            )
+        try:
+            location = resolve_location(**loc_kwargs)
+        except ValueError as exc:
+            audit.log(sid, "location_error", {"error": str(exc), "area": area})
+            # Fall through to empty candidates → needs_human_review.
+            location = None
+
+        if location is not None:
+            hospital_rows = find_hospitals(
+                location.ref_lat,
+                location.ref_lon,
+                case,
+                safety_result.tier,
+                location.rows,
+            )
+        else:
+            hospital_rows = []
+
+        audit.log(sid, "find", {
+            "tier": safety_result.tier,
+            "candidate_count": len(hospital_rows),
+            "candidate_ids": [h.id for h in hospital_rows],
+            "widened": location.widened_from is not None if location else False,
+        })
+
+        # ── Step 5: compare / rank ────────────────────────────────────────
+        ranked_hospitals = rank_hospitals(hospital_rows, safety_result.tier)
+        audit.log(sid, "compare", {
+            "ranked": [
+                {"rank": r.rank, "id": r.hospital.id, "score": r.score, "fallback": r.is_fallback}
+                for r in ranked_hospitals
+            ]
+        })
+
+        # ── Step 6: final_check (≤2 retries) ─────────────────────────────
+        answer_text = _build_answer_text_hospitals(ranked_hospitals, safety_result.tier, location)
+        cited_ids = _collect_cited_ids_hospitals(ranked_hospitals)
+        check_passed = False
+        needs_review = False
+
+        for attempt in range(_MAX_CHECK_RETRIES + 1):
+            check_result = final_check(
+                answer_text, cited_ids,
+                tier=safety_result.tier,
+                hospital_ids=cited_ids,
+            )
+            audit.log(sid, "final_check", {
+                "attempt": attempt + 1,
+                "passed": check_result.passed,
+                "problems": check_result.problems,
+            })
+            if check_result.passed:
+                check_passed = True
+                break
+            if attempt < _MAX_CHECK_RETRIES:
+                answer_text = (
+                    answer_text
+                    + "\n\n*Note: some details could not be fully verified. "
+                    "Please confirm directly with the hospital before attending.*"
+                )
+                audit.log(sid, "revise", {"attempt": attempt + 1})
+            else:
+                needs_review = True
+
+        if needs_review:
+            messages = _load_messages()
+            if safety_result.tier in ("urgent", "emergency"):
+                review_msg = messages["needs_human_review_urgent"]
+                tier_label = safety_result.tier.upper()
+                if safety_result.hits:
+                    reason_parts = ", ".join(h.name.replace("_", " ") for h in safety_result.hits)
+                else:
+                    reason_parts = "symptoms described"
+                handoff_line = _fill_placeholders(review_msg["handoff_prompt"])
+                answer_text = (
+                    f"**[{tier_label}]** {reason_parts.capitalize()}.\n\n"
+                    + _fill_placeholders(review_msg["body"])
+                    + f"\n\n{handoff_line}"
+                )
+            else:
+                review_msg = messages["needs_human_review"]
+                answer_text = (
+                    f"**{review_msg['heading']}**\n\n"
+                    + _fill_placeholders(review_msg["body"])
+                )
+            audit.log(sid, "needs_human_review", {"tier": safety_result.tier})
+
+        # ── Step 7: present ───────────────────────────────────────────────
+        audit.log(sid, "present", {"answer_preview": answer_text[:200]})
+
+        state = "needs_human_review" if needs_review else "present"
+        return SessionResult(
+            session_id=sid,
+            tier=safety_result.tier,
+            state=state,
+            case=case,
+            safety=safety_result,
+            candidates=hospital_rows,
+            ranked=ranked_hospitals,
+            answer_text=answer_text,
+            check_passed=check_passed,
+            needs_human_review=needs_review,
+            handoff_summary=None,
+            followup_questions_asked=1 if followup_q else 0,
+            missing_fields=case.missing_fields,
+            location=location,
+        )
+
+    # ── Demo path ─────────────────────────────────────────────────────────
     candidates = find_services(case, safety_result.tier, safety_result.hits)
     audit.log(sid, "find", {
         "tier": safety_result.tier,
@@ -243,7 +522,6 @@ def run_session(
         "candidate_ids": [c.id for c in candidates],
     })
 
-    # ── Step 5: compare / rank ────────────────────────────────────────────
     ranked = rank(candidates, safety_result.tier)
     audit.log(sid, "compare", {
         "ranked": [
@@ -252,7 +530,6 @@ def run_session(
         ]
     })
 
-    # ── Step 6: final_check (≤2 retries) ─────────────────────────────────
     answer_text = _build_answer_text(ranked, safety_result.tier)
     cited_ids = _collect_cited_ids(ranked)
     check_passed = False
@@ -269,7 +546,6 @@ def run_session(
             check_passed = True
             break
         if attempt < _MAX_CHECK_RETRIES:
-            # Revision: append a disclaimer and retry.
             answer_text = (
                 answer_text
                 + "\n\n*Note: some details could not be fully verified. "
@@ -283,9 +559,7 @@ def run_session(
         messages = _load_messages()
         if safety_result.tier in ("urgent", "emergency"):
             review_msg = messages["needs_human_review_urgent"]
-            # Tier badge: capitalise the tier name for display.
             tier_label = safety_result.tier.upper()
-            # Reason: the name of each rule hit, or a generic fallback.
             if safety_result.hits:
                 reason_parts = ", ".join(h.name.replace("_", " ") for h in safety_result.hits)
             else:
@@ -304,10 +578,8 @@ def run_session(
             )
         audit.log(sid, "needs_human_review", {"tier": safety_result.tier})
 
-    # ── Step 7: present ───────────────────────────────────────────────────
     audit.log(sid, "present", {"answer_preview": answer_text[:200]})
 
-    # Step 8 (handoff) is triggered separately after user consent.
     state = "needs_human_review" if needs_review else "present"
     return SessionResult(
         session_id=sid,
@@ -323,6 +595,7 @@ def run_session(
         handoff_summary=None,
         followup_questions_asked=1 if followup_q else 0,
         missing_fields=case.missing_fields,
+        location=None,
     )
 
 
