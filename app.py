@@ -6,15 +6,26 @@ Run with:  streamlit run app.py
 from __future__ import annotations
 
 import base64
+import html
 import json
+import logging
 import os
-from pathlib import Path
+import re
 import urllib.parse
+from pathlib import Path
 
 import streamlit as st
 
 from src.orchestrator import SessionResult, create_handoff_summary, run_session
 from src.locations import list_states, list_counties, list_cities
+from src.sanitize import MAX_INPUT_CHARS, sanitize_user_input
+
+# ---------------------------------------------------------------------------
+# Logging (internal only — no stack traces or paths shown to the user)
+# ---------------------------------------------------------------------------
+
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Page config — sidebar collapsed, toolbar minimal (also in config.toml)
@@ -162,6 +173,45 @@ _BADGE_CFG: dict[str, dict] = {
 _URGENT_ACTION = "Please go to the first option without delay."
 
 # ---------------------------------------------------------------------------
+# Safe URL helpers
+# ---------------------------------------------------------------------------
+
+# Characters allowed verbatim in a tel: href (RFC 3966 + common display chars).
+_TEL_SAFE = re.compile(r"[^\d+\-()\ ]")
+
+
+def _safe_tel_url(raw_number: str) -> str:
+    """Build a tel: URL from *raw_number*, keeping only digits, +, -, (, ), space.
+
+    Strips any character that is not in the safe set so that user-supplied or
+    data-supplied values cannot inject arbitrary href content.
+
+    Args:
+        raw_number: A phone number string from any source.
+
+    Returns:
+        A tel: URL string, e.g. "tel:+1-555-000-0000".
+    """
+    cleaned = _TEL_SAFE.sub("", raw_number)
+    return f"tel:{cleaned}"
+
+
+def _safe_maps_url(query: str) -> str:
+    """Build a Google Maps search URL with *query* percent-encoded.
+
+    Uses a fixed https://www.google.com/maps/search/ base so that the user
+    cannot influence the scheme or authority.
+
+    Args:
+        query: A plain-text location query string (name, address, city, state).
+
+    Returns:
+        A fully-formed https: URL safe for use in href attributes.
+    """
+    return "https://www.google.com/maps/search/?api=1&query=" + urllib.parse.quote(query)
+
+
+# ---------------------------------------------------------------------------
 # Button-spec helper — pure function, fully testable
 # ---------------------------------------------------------------------------
 
@@ -185,7 +235,7 @@ def get_button_spec(tier: str, result: SessionResult) -> dict:
         return {
             "kind": "link",
             "label": f"Call {number} now",
-            "url": f"tel:{number}",
+            "url": _safe_tel_url(number),
         }
 
     if tier == "urgent":
@@ -203,14 +253,10 @@ def get_button_spec(tier: str, result: SessionResult) -> dict:
                 city    = getattr(svc, "city",    "") or getattr(svc, "area", "")
                 state   = getattr(svc, "state",   "")
                 query   = ", ".join(p for p in (name, address, city, state) if p)
-                maps_url = (
-                    "https://www.google.com/maps/search/?api=1&query="
-                    + urllib.parse.quote(query)
-                )
                 return {
                     "kind": "link",
                     "label": f"Get directions to {name}",
-                    "url": maps_url,
+                    "url": _safe_maps_url(query),
                 }
         # Fallback if no top result.
         return {
@@ -269,6 +315,7 @@ def _render_location_inputs() -> tuple[str | None, str | None, str | None, str |
         zip_: str | None = None
         zip_error = ""
         if zip_raw:
+            # Validate: exactly 5 ASCII digits (no letters, no dashes).
             if len(zip_raw) == 5 and zip_raw.isdigit():
                 zip_ = zip_raw
             else:
@@ -331,6 +378,47 @@ def _location_level_notice(
     if state:
         return f"Location: {state} (state-wide)"
     return ""
+
+
+# ---------------------------------------------------------------------------
+# Location value validation helpers
+# ---------------------------------------------------------------------------
+
+def _validate_location_values(
+    state: str | None,
+    county: str | None,
+    city: str | None,
+    zip_: str | None,
+) -> bool:
+    """Return True if all non-None location values appear in the loaded lists.
+
+    Selectbox widgets already restrict choices to loaded lists, but we re-check
+    here to guard against session-state tampering or future code changes.
+
+    Args:
+        state:  State abbreviation or None.
+        county: County name or None.
+        city:   City name or None.
+        zip_:   5-digit ZIP string or None.
+
+    Returns:
+        True when all values are valid (or None); False otherwise.
+    """
+    if zip_ is not None:
+        if not (len(zip_) == 5 and zip_.isdigit()):
+            return False
+    if state is not None:
+        if state not in _cached_states():
+            return False
+    if county is not None and state is not None:
+        county_names = [name for _, name in _cached_counties(state)]
+        if county not in county_names:
+            return False
+    if city is not None and state is not None:
+        cities = _cached_cities(state, county)
+        if city not in cities:
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +486,9 @@ def _render_case_badge_html(result: SessionResult) -> None:
     20–22 px bold tier word.  Colour is never the only distinguishing cue:
     every tier also shows a distinct icon and the word ROUTINE / URGENT /
     EMERGENCY.
+
+    The 'why' reason text comes from our own rule names (not user text), but
+    is still escaped for defence in depth.
     """
     tier = result.tier
     cfg  = _BADGE_CFG.get(tier, _BADGE_CFG["routine"])
@@ -406,18 +497,18 @@ def _render_case_badge_html(result: SessionResult) -> None:
     icon_html = f'<span style="font-size:1.6rem;line-height:1" aria-hidden="true">{cfg["icon"]}</span>'
     word_html = (
         f'<span style="font-size:1.3rem;font-weight:700;letter-spacing:0.04em">'
-        f'{cfg["word"]}</span>'
+        f'{html.escape(cfg["word"])}</span>'
     )
     # Second line: why-reason (only if non-empty)
     reason_html = ""
     if why:
         reason_html = (
             f'<div style="font-size:0.78rem;font-weight:400;margin-top:4px;'
-            f'opacity:0.85;line-height:1.3">{why}</div>'
+            f'opacity:0.85;line-height:1.3">{html.escape(why)}</div>'
         )
 
-    html = (
-        f'<div role="status" aria-label="{cfg["word"]}" style="'
+    badge_html = (
+        f'<div role="status" aria-label="{html.escape(cfg["word"])}" style="'
         f'background:{cfg["bg"]};color:{cfg["color"]};'
         f'border:1.5px solid {cfg["border"]};border-radius:8px;'
         f'padding:10px 16px;min-height:56px;'
@@ -430,7 +521,7 @@ def _render_case_badge_html(result: SessionResult) -> None:
         f'  {reason_html}'
         f'</div>'
     )
-    st.markdown(html, unsafe_allow_html=True)
+    st.markdown(badge_html, unsafe_allow_html=True)
 
 
 def _render_logo_title_inline() -> None:
@@ -526,11 +617,8 @@ def _format_distance_line(h: object, selected_city: str | None, selected_zip: st
 def _render_hospital_card(r: object, *, top: bool, selected_city: str | None = None, selected_zip: str | None = None) -> None:
     """Render one hospital result as a styled card.
 
-    Top card: white bg, 14 px radius, soft shadow, 20 px padding, 4 px teal left accent border.
-    Other cards: same minus the left accent.
-    Material icons are used for hospital/phone/address/call-ahead lines.
-    Type/trauma/beds are small teal-tinted rounded badges.
-    Call-ahead note is amber (#8A4B00 on #FFF4DB).
+    All data-derived values (hospital name, address, city, phone, etc.) are
+    escaped with html.escape before insertion into the HTML string.
 
     Args:
         r:             A RankedHospital instance.
@@ -543,6 +631,9 @@ def _render_hospital_card(r: object, *, top: bool, selected_city: str | None = N
     name = h.display_name or h.name.title()
     if r.is_fallback:  # type: ignore[attr-defined]
         name += " (alternative option)"
+
+    # Escape name and all other data-derived values before HTML insertion.
+    name_esc = html.escape(name)
 
     left_border = "border-left:4px solid #0E7C86;" if top else ""
     card_style = (
@@ -558,32 +649,33 @@ def _render_hospital_card(r: object, *, top: bool, selected_city: str | None = N
     # Name / heading
     lines.append(
         f'<div style="font-size:{heading_size};font-weight:700;color:#16313A;'
-        f'margin-bottom:10px">{name}</div>'
+        f'margin-bottom:10px">{name_esc}</div>'
     )
 
     # Distance line
     dist_line = _format_distance_line(h, selected_city, selected_zip)
     if dist_line:
         # strip the leading emoji — we use Material icon instead
-        dist_text = dist_line.lstrip("📍").strip()
+        dist_text = html.escape(dist_line.lstrip("📍").strip())
         lines.append(
             f'<div style="margin-bottom:6px">'
             f'<span style="vertical-align:middle;font-size:1rem" class="material-icons-round">location_on</span>'
             f' <span style="vertical-align:middle">{dist_text}</span></div>'
         )
 
-    # Phone
+    # Phone — build tel: URL only from safe characters; display raw phone escaped.
     if h.phone:
-        phone_digits = "".join(ch for ch in h.phone if ch.isdigit())
+        phone_esc = html.escape(h.phone)
+        tel_url = _safe_tel_url(h.phone)
         lines.append(
             f'<div style="margin-bottom:6px">'
             f'<span style="vertical-align:middle;font-size:1rem" class="material-icons-round">call</span>'
-            f' <a href="tel:{phone_digits}" style="vertical-align:middle;font-weight:600;'
-            f'color:#0E7C86;text-decoration:none">{h.phone}</a></div>'
+            f' <a href="{html.escape(tel_url)}" style="vertical-align:middle;font-weight:600;'
+            f'color:#0E7C86;text-decoration:none">{phone_esc}</a></div>'
         )
 
-    # Address
-    addr_parts = [p for p in (h.address, h.city, h.state, h.zip) if p]
+    # Address — escape every field before joining.
+    addr_parts = [html.escape(p) for p in (h.address, h.city, h.state, h.zip) if p]
     if addr_parts:
         lines.append(
             f'<div style="margin-bottom:6px">'
@@ -594,11 +686,11 @@ def _render_hospital_card(r: object, *, top: bool, selected_city: str | None = N
     # Teal-tinted badges: type, trauma, beds
     badge_parts: list[str] = []
     if h.type:
-        badge_parts.append(h.type.replace("_", " ").title())
+        badge_parts.append(html.escape(h.type.replace("_", " ").title()))
     if h.trauma:
-        badge_parts.append(f"Trauma: {h.trauma}")
+        badge_parts.append(html.escape(f"Trauma: {h.trauma}"))
     if h.beds:
-        badge_parts.append(f"{h.beds} beds")
+        badge_parts.append(html.escape(f"{h.beds} beds"))
     if badge_parts:
         badges_html = " ".join(
             f'<span style="display:inline-block;background:#E4F1F3;color:#0B4F57;'
@@ -608,8 +700,8 @@ def _render_hospital_card(r: object, *, top: bool, selected_city: str | None = N
         )
         lines.append(f'<div style="margin-bottom:10px;margin-top:6px">{badges_html}</div>')
 
-    # Call-ahead note (amber)
-    val_text = f"Record validated {h.val_year}. " if h.val_year else ""
+    # Call-ahead note (amber) — val_year comes from our CSV, not user input, but escape anyway.
+    val_text = html.escape(f"Record validated {h.val_year}. ") if h.val_year else ""
     lines.append(
         f'<div style="margin-top:8px;background:#FFF4DB;border-radius:6px;padding:6px 10px;'
         f'font-size:0.82rem;color:#8A4B00">'
@@ -620,7 +712,7 @@ def _render_hospital_card(r: object, *, top: bool, selected_city: str | None = N
 
     # Dataset ID (small muted, always visible without expander)
     lines.append(
-        f'<div style="margin-top:8px;font-size:0.73rem;color:#57606a">ID: {h.id}</div>'
+        f'<div style="margin-top:8px;font-size:0.73rem;color:#57606a">ID: {html.escape(str(h.id))}</div>'
     )
 
     inner = "\n".join(lines)
@@ -677,18 +769,20 @@ def _render_demo_card(result: SessionResult) -> None:
         return
 
     with st.container(border=True):
-        st.markdown(f"### {svc.name}")
+        # Use st.text for service name to prevent markdown injection.
+        st.markdown(f"### {html.escape(svc.name)}")
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f"**Type:** {svc.type.replace('_', ' ').title()}")
+            st.markdown(f"**Type:** {html.escape(svc.type.replace('_', ' ').title())}")
             if svc.area:
-                st.markdown(f"**Area:** {svc.area}")
+                st.markdown(f"**Area:** {html.escape(svc.area)}")
             if svc.phone:
                 phone_digits = "".join(ch for ch in svc.phone if ch.isdigit())
-                st.markdown(f"**Phone:** [{svc.phone}](tel:{phone_digits})")
+                tel_url = _safe_tel_url(svc.phone)
+                st.markdown(f"**Phone:** [{html.escape(svc.phone)}]({html.escape(tel_url)})")
         with col2:
             if svc.hours:
-                st.markdown(f"**Hours:** {svc.hours}")
+                st.markdown(f"**Hours:** {html.escape(svc.hours)}")
             if svc.distance_km is not None:
                 travel = svc.travel_min_estimate
                 st.markdown(
@@ -699,8 +793,8 @@ def _render_demo_card(result: SessionResult) -> None:
                 st.markdown("**Distance:** Online — no travel needed")
             val = getattr(svc, "last_verified", "")
             if val:
-                st.markdown(f"**Verified:** {val}")
-        st.markdown(f"*{best.reason}*")
+                st.markdown(f"**Verified:** {html.escape(str(val))}")
+        st.markdown(f"*{html.escape(best.reason)}*")
 
 
 # ---------------------------------------------------------------------------
@@ -796,7 +890,12 @@ def main() -> None:
     # ── Chat history ──────────────────────────────────────────────────────
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            if msg["role"] == "user":
+                # Display user messages as plain text so typed markdown
+                # (links, images, HTML) is never rendered.
+                st.text(msg["content"])
+            else:
+                st.markdown(msg["content"])
 
     # Refresh result reference after potential auto-clear above.
     result = st.session_state.session_result
@@ -874,22 +973,56 @@ def main() -> None:
 
     # ── Chat input ────────────────────────────────────────────────────────
     if prompt := st.chat_input("Describe your concern here…"):
+        # ── Security: sanitise input before anything else ─────────────────
+        san = sanitize_user_input(prompt)
+        if not san.ok:
+            st.warning(san.error)
+            st.stop()
+
+        if san.was_truncated:
+            st.info(
+                f"Your message was longer than {MAX_INPUT_CHARS} characters and has been "
+                "shortened. Please review the text below."
+            )
+
+        clean_prompt = san.text
+
+        # ── Security: validate location values against loaded lists ────────
+        if not _validate_location_values(state, county, city, zip_):
+            st.warning("Location selection is invalid. Please re-select from the dropdowns.")
+            st.stop()
+
         # Require at least state or ZIP before proceeding.
         if not state and not zip_:
             st.warning("Please select a State or enter a ZIP code before describing your concern.")
             st.stop()
 
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        # Store the sanitised text in chat history and display it as plain text.
+        st.session_state.messages.append({"role": "user", "content": clean_prompt})
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.text(clean_prompt)
 
         with st.chat_message("assistant"):
             with st.spinner("Checking…"):
-                _process_user_input(prompt, area)
+                try:
+                    _process_user_input(clean_prompt, area)
+                except Exception as exc:  # noqa: BLE001
+                    _log.error(
+                        "Unhandled error in _process_user_input: %s: %s",
+                        type(exc).__name__,
+                        exc,
+                        exc_info=True,
+                    )
+                    st.error(
+                        "Something went wrong. Please try again, and if this is an emergency call 911."
+                    )
+                    st.stop()
 
             result = st.session_state.session_result
             if result is None:
-                st.markdown("Something went wrong. Please try again.")
+                st.error(
+                    "Something went wrong. Please try again, and if this is an emergency call 911."
+                )
             else:
                 # Store display_intro in the chat history (short friendly sentence).
                 # answer_text is kept for final_check grounding — not shown in the bubble.
