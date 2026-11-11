@@ -478,7 +478,7 @@ def _render_header_row(result: SessionResult | None) -> None:
         _render_logo_title_inline()
 
     with col_right:
-        if result is not None and result.state not in ("describe",):
+        if result is not None and result.state not in ("describe", "gate"):
             _render_case_badge_html(result)
 
 
@@ -804,7 +804,11 @@ def main() -> None:
     # ── Recommendation display ────────────────────────────────────────────
     if result is not None and result.state not in ("describe",):
 
-        if result.tier == "emergency":
+        # Gate responses: plain text only — no badge, no cards, no action button.
+        if result.state == "gate":
+            st.info(result.answer_text)
+
+        elif result.tier == "emergency":
             st.error(result.answer_text)
 
         elif result.needs_human_review:
@@ -819,37 +823,37 @@ def main() -> None:
             else:
                 _render_demo_card(result)
 
-        # ── Single action button per tier (case actions only) ─────────────
-        st.divider()
-        if not st.session_state.handoff_shown:
-            spec = get_button_spec(result.tier, result)
+            # ── Single action button per tier (case actions only) ─────────────
+            st.divider()
+            if not st.session_state.handoff_shown:
+                spec = get_button_spec(result.tier, result)
 
-            # Wrap in a tier-specific div so our CSS classes can target it.
-            btn_class = f"cc-btn-{result.tier}"
-            st.markdown(f'<div class="{btn_class}">', unsafe_allow_html=True)
+                # Wrap in a tier-specific div so our CSS classes can target it.
+                btn_class = f"cc-btn-{result.tier}"
+                st.markdown(f'<div class="{btn_class}">', unsafe_allow_html=True)
 
-            if spec["kind"] == "link":
-                st.link_button(
-                    spec["label"],
-                    url=spec["url"],
-                    use_container_width=True,
-                    type="primary",
-                )
+                if spec["kind"] == "link":
+                    st.link_button(
+                        spec["label"],
+                        url=spec["url"],
+                        use_container_width=True,
+                        type="primary",
+                    )
 
-            else:
-                # "consent" → show button, generate summary on click
-                if st.button(spec["label"], key="action_consent", use_container_width=True, type="primary"):
-                    summary = create_handoff_summary(result)
-                    st.session_state.handoff_shown = True
-                    st.session_state.handoff_text = summary
-                    st.rerun()
+                else:
+                    # "consent" → show button, generate summary on click
+                    if st.button(spec["label"], key="action_consent", use_container_width=True, type="primary"):
+                        summary = create_handoff_summary(result)
+                        st.session_state.handoff_shown = True
+                        st.session_state.handoff_text = summary
+                        st.rerun()
 
-            st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
-        elif hasattr(st.session_state, "handoff_text") and st.session_state.handoff_text:
-            # Display the summary with the copy icon; wrap_lines prevents horizontal overflow.
-            st.caption("Summary — copy with the icon in the top-right corner.")
-            st.code(st.session_state.handoff_text, language=None, wrap_lines=True)
+            elif hasattr(st.session_state, "handoff_text") and st.session_state.handoff_text:
+                # Display the summary with the copy icon; wrap_lines prevents horizontal overflow.
+                st.caption("Summary — copy with the icon in the top-right corner.")
+                st.code(st.session_state.handoff_text, language=None, wrap_lines=True)
 
     # ── Footer ────────────────────────────────────────────────────────────
     _render_footer()

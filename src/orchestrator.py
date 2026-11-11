@@ -35,6 +35,13 @@ from src import audit
 from src.advisor import RankedHospital, RankedResult, rank, rank_hospitals
 from src.checks import final_check
 from src.finder import HospitalCandidate, ServiceCandidate, find_hospitals, find_services
+from src.gate import (
+    GateClass,
+    REPLY_OFFTOPIC,
+    REPLY_SMALLTALK,
+    REPLY_UNCLEAR,
+    classify as gate_classify,
+)
 from src.intake import CaseResult, extract_case, get_followup_question
 from src.locations import LocationResult, resolve_location
 from src.safety import SafetyResult, check_red_flags
@@ -66,6 +73,7 @@ class SessionResult:
     followup_questions_asked: int
     missing_fields: list[str]
     location: Optional[LocationResult]    # set when hospitals_us path is used
+    gate_class: GateClass = "health"      # "health"|"smalltalk"|"offtopic"|"unclear"
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +447,43 @@ def run_session(
             missing_fields=case.missing_fields,
             location=None,
         )
+
+    # ── Step 3b: gate — only runs when no red flag fired ──────────────────
+    if safety_result.tier == "routine":
+        gate_class = gate_classify(user_text)
+        audit.log(sid, "gate", {
+            "class": gate_class,
+            "user_text_preview": user_text[:80],
+        })
+
+        if gate_class != "health":
+            # Fill the emergency number placeholder in the reply templates.
+            reply = {
+                "smalltalk": REPLY_SMALLTALK,
+                "offtopic":  REPLY_OFFTOPIC,
+                "unclear":   REPLY_UNCLEAR,
+            }[gate_class].replace("{emergency_number}", _emergency_number())
+
+            return SessionResult(
+                session_id=sid,
+                tier="routine",
+                state="gate",
+                case=case,
+                safety=safety_result,
+                candidates=[],
+                ranked=[],
+                answer_text=reply,
+                display_intro=reply,
+                check_passed=True,
+                needs_human_review=False,
+                handoff_summary=None,
+                followup_questions_asked=0,
+                missing_fields=[],
+                location=None,
+                gate_class=gate_class,
+            )
+    else:
+        gate_class = "health"
 
     # ── Step 4: find ──────────────────────────────────────────────────────
     location: Optional[LocationResult] = None
