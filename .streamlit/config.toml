@@ -1,5 +1,14 @@
+[server]
+address = "localhost"
+enableXsrfProtection = true
+headless = false
+
+[browser]
+gatherUsageStats = false
+
 [client]
 toolbarMode = "minimal"
+showErrorDetails = "none"
 
 [ui]
 hideTopBar = true

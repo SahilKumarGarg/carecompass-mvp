@@ -208,6 +208,38 @@ properties relevant to governance:
 `.env.example` provides a template; the defaults are `EMERGENCY_NUMBER=911`,
 `EMERGENCY_REGION=US`, and `DATA_SOURCE=hospitals_us`.
 
+
+### Audit log retention
+
+Audit logs are written to `logs/audit.jsonl` and `logs/benchmark.jsonl`.
+Both files are listed in `.gitignore` and must never be committed.
+
+**Maximum retention: 90 days.** Logs must not be kept longer than 90 days.
+Run [`scripts/clear_logs.py --delete`](../scripts/clear_logs.py) periodically,
+or automate via cron/task scheduler.
+
+**What is logged (default — `LOG_USER_TEXT=false`):**
+- Tier, rule hits, hospital IDs, step names and timings.
+- Message length (`message_len`) and a short hash (`msg_hash`, first 8 hex chars of SHA-256).
+- Phone numbers typed by the user and raw user text are **never** logged.
+- Newlines are stripped from all logged strings.
+
+**When `LOG_USER_TEXT=true`** (development/walkthrough only):
+- Raw user text is included in the `describe` step data.
+- Newlines are still stripped; phone-number-like patterns are still redacted.
+- Only enable this with explicit consent and appropriate access controls.
+
+To clear all logs:
+
+```powershell
+# Dry-run (list files that would be deleted)
+python scripts/clear_logs.py
+
+# Actually delete
+python scripts/clear_logs.py --delete
+```
+
+
 ---
 
 ## 4. Red-flag rule reference

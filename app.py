@@ -16,8 +16,10 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.config import ConfigError, validate_config
 from src.orchestrator import SessionResult, create_handoff_summary, run_session
 from src.locations import list_states, list_counties, list_cities
+from src.rate_limit import RateLimiter
 from src.sanitize import MAX_INPUT_CHARS, sanitize_user_input
 
 # ---------------------------------------------------------------------------
@@ -434,10 +436,15 @@ def _init_state() -> None:
         "handoff_text":    None,
         "session_id":      None,
         "_last_area":      None,   # track location changes to auto-clear results
+        "_rate_limiter":   None,   # RateLimiter instance for this browser session
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
+
+    # Ensure rate limiter is always a RateLimiter instance (not None after init).
+    if st.session_state._rate_limiter is None:
+        st.session_state._rate_limiter = RateLimiter()
 
 
 def _reset_session() -> None:
@@ -973,6 +980,13 @@ def main() -> None:
 
     # ── Chat input ────────────────────────────────────────────────────────
     if prompt := st.chat_input("Describe your concern here…"):
+        # ── Rate limit check ──────────────────────────────────────────────
+        limiter: RateLimiter = st.session_state._rate_limiter
+        allowed, wait_msg = limiter.check()
+        if not allowed:
+            st.warning(wait_msg)
+            st.stop()
+
         # ── Security: sanitise input before anything else ─────────────────
         san = sanitize_user_input(prompt)
         if not san.ok:
@@ -1002,6 +1016,9 @@ def main() -> None:
         with st.chat_message("user"):
             st.text(clean_prompt)
 
+        # Record the message against the rate limiter now that it is valid.
+        limiter.record()
+
         with st.chat_message("assistant"):
             with st.spinner("Checking…"):
                 try:
@@ -1030,6 +1047,18 @@ def main() -> None:
                     {"role": "assistant", "content": result.display_intro}
                 )
                 st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Startup configuration validation
+# ---------------------------------------------------------------------------
+
+try:
+    validate_config()
+except ConfigError as _cfg_err:
+    # Surface the error immediately — do not start the app with bad config.
+    st.error(f"**Configuration error:** {_cfg_err}")
+    st.stop()
 
 
 if __name__ == "__main__":

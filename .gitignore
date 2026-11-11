@@ -13,6 +13,9 @@ venv/
 logs/*.jsonl
 logs/*.log
 
+# Raw/unprocessed data (may contain PII or large files)
+data/raw/
+
 # OS and editor
 .DS_Store
 Thumbs.db
