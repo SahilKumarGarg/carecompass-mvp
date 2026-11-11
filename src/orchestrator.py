@@ -81,14 +81,38 @@ class SessionResult:
 # ---------------------------------------------------------------------------
 
 def _load_messages() -> dict:
-    """Load data/messages.json (no caching needed; called once per session)."""
+    """Load data/messages.json and replace all placeholders at load time.
+
+    Every string value in the messages dict has {emergency_number} and
+    {emergency_region} replaced so that no raw placeholder can ever reach
+    user-facing output.  The startup check verify_no_placeholders() confirms
+    this guarantee.
+    """
     with _MESSAGES_PATH.open(encoding="utf-8") as fh:
-        return json.load(fh)["messages"]
+        raw = json.load(fh)["messages"]
+
+    number = _emergency_number()
+    region = _emergency_region()
+
+    def _replace(obj: object) -> object:
+        if isinstance(obj, str):
+            return (
+                obj
+                .replace("{emergency_number}", number)
+                .replace("{emergency_region}", region)
+            )
+        if isinstance(obj, dict):
+            return {k: _replace(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_replace(i) for i in obj]
+        return obj
+
+    return _replace(raw)  # type: ignore[return-value]
 
 
-# Demo defaults — clearly not real values so they cannot be mistaken for genuine
-# emergency contacts if .env is absent.
-_DEMO_EMERGENCY_NUMBER = "[DEMO-999]"
+# Code defaults — used when EMERGENCY_NUMBER / EMERGENCY_REGION are not set.
+# These are the same sensible defaults shown in .env.example.
+_DEMO_EMERGENCY_NUMBER = "911"
 _DEMO_EMERGENCY_REGION = "DEMO REGION"
 
 
@@ -98,12 +122,12 @@ def _data_source() -> str:
 
 
 def _emergency_number() -> str:
-    """Read EMERGENCY_NUMBER from env; fallback to a clearly-labelled demo value."""
+    """Read EMERGENCY_NUMBER from env; fallback to the code default (911)."""
     return os.environ.get("EMERGENCY_NUMBER", "").strip() or _DEMO_EMERGENCY_NUMBER
 
 
 def _emergency_region() -> str:
-    """Read EMERGENCY_REGION from env; fallback to a clearly-labelled demo value."""
+    """Read EMERGENCY_REGION from env; fallback to a labelled demo value."""
     return os.environ.get("EMERGENCY_REGION", "").strip() or _DEMO_EMERGENCY_REGION
 
 
@@ -114,6 +138,40 @@ def _fill_placeholders(text: str) -> str:
         .replace("{emergency_number}", _emergency_number())
         .replace("{emergency_region}", _emergency_region())
     )
+
+
+def verify_no_placeholders(messages: dict) -> None:
+    """Startup check: raise RuntimeError if any message string still contains a raw placeholder.
+
+    A raw placeholder looks like '[' followed by characters and ']' (e.g. the
+    old '[DEMO-999]' sentinel), or a literal '{emergency_number}' that was not
+    replaced.  Call this once at import time to catch misconfiguration early.
+
+    Args:
+        messages: The already-filled messages dict from _load_messages().
+
+    Raises:
+        RuntimeError: if any string value still contains a placeholder pattern.
+    """
+    import re as _re
+    _BRACKET_PLACEHOLDER = _re.compile(r"\[DEMO")
+    _BRACE_PLACEHOLDER   = _re.compile(r"\{emergency_(?:number|region)\}")
+
+    def _check(obj: object, path: str) -> None:
+        if isinstance(obj, str):
+            if _BRACKET_PLACEHOLDER.search(obj) or _BRACE_PLACEHOLDER.search(obj):
+                raise RuntimeError(
+                    f"Unresolved placeholder in messages at {path!r}: {obj!r}. "
+                    "Set EMERGENCY_NUMBER (and optionally EMERGENCY_REGION) in your .env file."
+                )
+        elif isinstance(obj, dict):
+            for k, v in obj.items():
+                _check(v, f"{path}.{k}")
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                _check(v, f"{path}[{i}]")
+
+    _check(messages, "messages")
 
 
 # Sentinel returned when a location string cannot be resolved without a state.
@@ -426,9 +484,8 @@ def run_session(
     if safety_result.tier == "emergency":
         messages = _load_messages()
         em = messages["emergency"]
-        body = _fill_placeholders(em["body"])
-        note = _fill_placeholders(em["additional_note"])
-        answer = f"🚨 **{em['heading']}**\n\n{body}\n\n*{note}*"
+        # body already has placeholders replaced by _load_messages()
+        answer = f"🚨 **{em['heading']}**\n\n{em['body']}"
         audit.log(sid, "emergency_exit", {"answer_preview": answer[:120]})
         return SessionResult(
             session_id=sid,
@@ -439,7 +496,9 @@ def run_session(
             candidates=[],
             ranked=[],
             answer_text=answer,
-            display_intro=answer,
+            # display_intro is the short chat-bubble sentence only.
+            # The full alert box is rendered separately in app.py via st.error().
+            display_intro=f"🚨 {em['heading']} See the alert above.",
             check_passed=True,   # emergency path bypasses check
             needs_human_review=False,
             handoff_summary=None,

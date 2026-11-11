@@ -317,9 +317,11 @@ class TestEmergencyConfig:
         monkeypatch.setenv("EMERGENCY_REGION", "")
         assert _emergency_region() == _DEMO_EMERGENCY_REGION
 
-    def test_demo_number_contains_demo_label(self) -> None:
-        """Demo default must be obviously not a real emergency number."""
-        assert "DEMO" in _DEMO_EMERGENCY_NUMBER or "demo" in _DEMO_EMERGENCY_NUMBER.lower()
+    def test_demo_default_number_is_911(self) -> None:
+        """Code default (when EMERGENCY_NUMBER is unset) must be '911'.
+        The old [DEMO-999] sentinel is retired; 911 is the documented default
+        in .env.example and is a safe, widely-recognisable emergency number."""
+        assert _DEMO_EMERGENCY_NUMBER == "911"
 
     def test_demo_region_contains_demo_label(self) -> None:
         assert "DEMO" in _DEMO_EMERGENCY_REGION or "demo" in _DEMO_EMERGENCY_REGION.lower()

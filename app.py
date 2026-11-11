@@ -809,7 +809,21 @@ def main() -> None:
             st.info(result.answer_text)
 
         elif result.tier == "emergency":
+            # Show the full emergency message exactly once in a prominent alert box.
+            # The chat bubble (display_intro) is intentionally a short sentence only.
             st.error(result.answer_text)
+            # Single action button — "Call 911 now" (or configured number) with tel: link.
+            st.divider()
+            spec = get_button_spec("emergency", result)
+            btn_class = "cc-btn-emergency"
+            st.markdown(f'<div class="{btn_class}">', unsafe_allow_html=True)
+            st.link_button(
+                spec["label"],
+                url=spec["url"],
+                use_container_width=True,
+                type="primary",
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
 
         elif result.needs_human_review:
             st.warning(result.answer_text)
