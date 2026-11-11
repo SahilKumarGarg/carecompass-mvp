@@ -70,7 +70,12 @@ def validate_config() -> None:
     for filename in _REQUIRED_FILES.get(source, []):
         path = _DATA_DIR / filename
         if not path.exists():
+            # Surface only the filename to the user; log the full path internally.
+            import logging as _logging
+            _logging.getLogger(__name__).error(
+                "Required data file not found: %s (full path: %s)", filename, path
+            )
             raise ConfigError(
-                f"Required data file not found: {path}. "
+                f"Required data file not found: {filename}. "
                 f"DATA_SOURCE={source!r} requires this file to be present."
             )

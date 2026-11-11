@@ -902,7 +902,11 @@ def main() -> None:
                 # (links, images, HTML) is never rendered.
                 st.text(msg["content"])
             else:
-                st.markdown(msg["content"])
+                # Escape assistant messages before rendering as markdown so that
+                # any HTML/script injected via a crafted display_intro cannot
+                # execute.  Our own templates use only markdown (**, *, emoji)
+                # which survives html.escape intact.
+                st.markdown(html.escape(msg["content"]))
 
     # Refresh result reference after potential auto-clear above.
     result = st.session_state.session_result
