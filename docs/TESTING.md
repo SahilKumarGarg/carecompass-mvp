@@ -100,6 +100,23 @@ The US hospitals dataset (`data/hospitals_clean.csv`) is not committed to the re
 and is not required to run the test suite. See [`docs/DATA.md`](DATA.md) for instructions
 on generating it.
 
+### Audit log behaviour in tests
+
+The test suite writes to `logs/benchmark.jsonl` (via `audit.log_benchmark`) rather than
+`logs/audit.jsonl`, so test traffic does not pollute the operational audit log.
+
+By default (`LOG_USER_TEXT=false`), **no typed health text appears in either log file.**
+The audit log records only tier, step names, timings, message-length/hash pairs, and
+redacted (hashed or `[REDACTED]`) field values.  This applies both during tests and
+during normal app use.
+
+### Deployment notice
+
+> **This application is designed for local demonstration only.**
+> The test suite demonstrates the safety properties of the local demo.
+> Before any network deployment, complete the checklist in
+> [`docs/SECURITY.md`](SECURITY.md).
+
 ---
 
 ## Test class structure (selected files)

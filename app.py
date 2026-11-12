@@ -531,38 +531,37 @@ def _render_case_badge_html(result: SessionResult) -> None:
     st.markdown(badge_html, unsafe_allow_html=True)
 
 
-def _render_logo_title_inline() -> None:
-    """Render the logo (56 px) and 'CareCompass' title in dark teal on one line."""
+def _render_logo_title_with_button(has_conversation: bool) -> None:
+    """Render logo + 'CareCompass' title + optional 'Start over' button on one line.
+
+    When a conversation exists the button appears immediately to the right of the
+    brand name in a nested two-sub-column layout so all three elements share the
+    same baseline.  When there is no conversation only the logo and title are shown.
+    """
     logo_path = _LOGO_PNG if _LOGO_PNG.exists() else (_LOGO_SVG if _LOGO_SVG.exists() else None)
     title_html = (
         '<span style="font-size:1.75rem;font-weight:700;color:#0B4F57;line-height:1.15">'
         'CareCompass</span>'
     )
-    if logo_path is not None:
-        uri = _data_uri(logo_path)
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:12px">'
-            f'<img src="{uri}" style="height:56px;width:auto" alt="CareCompass logo"/>'
-            f'{title_html}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(title_html, unsafe_allow_html=True)
 
+    def _logo_title_md() -> None:
+        if logo_path is not None:
+            uri = _data_uri(logo_path)
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:12px">'
+                f'<img src="{uri}" style="height:56px;width:auto" alt="CareCompass logo"/>'
+                f'{title_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(title_html, unsafe_allow_html=True)
 
-def _render_header_row(result: SessionResult | None) -> None:
-    """Render the single header row with three columns.
-
-    LEFT  (1.2): 'Start over' button — only when a conversation exists.
-    MIDDLE (4):  Logo + 'CareCompass' title on one line.
-    RIGHT  (2.6): Large case-type badge — only after a case has been assessed.
-    """
-    has_conversation = bool(st.session_state.get("messages"))
-    col_left, col_mid, col_right = st.columns([1.2, 4, 2.6], vertical_alignment="center")
-
-    with col_left:
-        if has_conversation:
+    if has_conversation:
+        sub_title, sub_btn = st.columns([3.5, 1.5], vertical_alignment="center")
+        with sub_title:
+            _logo_title_md()
+        with sub_btn:
             if st.button(
                 "Start over",
                 icon=":material/restart_alt:",
@@ -571,9 +570,21 @@ def _render_header_row(result: SessionResult | None) -> None:
             ):
                 _full_reset()
                 st.rerun()
+    else:
+        _logo_title_md()
 
-    with col_mid:
-        _render_logo_title_inline()
+
+def _render_header_row(result: SessionResult | None) -> None:
+    """Render the header row.
+
+    LEFT  (5.5): Logo + 'CareCompass' title + optional 'Start over' button (inline).
+    RIGHT (2.5): Large case-type badge — only after a case has been assessed.
+    """
+    has_conversation = bool(st.session_state.get("messages"))
+    col_left, col_right = st.columns([5.5, 2.5], vertical_alignment="center")
+
+    with col_left:
+        _render_logo_title_with_button(has_conversation)
 
     with col_right:
         if result is not None and result.state not in ("describe", "gate"):

@@ -221,8 +221,17 @@ or automate via cron/task scheduler.
 **What is logged (default — `LOG_USER_TEXT=false`):**
 - Tier, rule hits, hospital IDs, step names and timings.
 - Message length (`message_len`) and a short hash (`msg_hash`, first 8 hex chars of SHA-256).
-- Phone numbers typed by the user and raw user text are **never** logged.
-- Newlines are stripped from all logged strings.
+- **No typed health text is ever written to the log.**  Free-text fields (`user_text`,
+  `concern`, `who`, and the `area` field in error steps) are replaced by
+  `{"len": N, "hash": "xxxxxxxx"}` (SHA-256, first 8 hex chars).
+- Phone numbers are always replaced with `[REDACTED]`, regardless of the `LOG_USER_TEXT` setting.
+- `user_text_preview` is dropped entirely.
+- `severity_cues` and `denied_symptoms` list elements are each hashed individually.
+- Location value fields (`state`, `county`, `city`, `zip`) are replaced by a single
+  `location_level` key that names only the finest level present — not the actual values.
+- Error strings are truncated to the exception class / error-type token; the full message
+  is dropped.
+- Newlines are stripped from all logged strings (log-injection prevention).
 
 **When `LOG_USER_TEXT=true`** (development/walkthrough only):
 - Raw user text is included in the `describe` step data.
@@ -238,6 +247,14 @@ python scripts/clear_logs.py
 # Actually delete
 python scripts/clear_logs.py --delete
 ```
+
+### Deployment notice
+
+> **This application is designed for local demonstration only.**
+> Before exposing it on any network-accessible server, complete the deployment
+> checklist in [`docs/SECURITY.md`](SECURITY.md): add a reverse proxy with per-IP
+> rate limiting, terminate TLS, set `server.headless = true`, redirect stderr to an
+> internal log sink, run `pip-audit`, and enforce the 90-day log-retention schedule.
 
 
 ---

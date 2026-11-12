@@ -233,11 +233,34 @@ carecompass-mvp/
 
 ---
 
+## Security and deployment
+
+> **This application is designed for local demonstration only.**
+> Running it on a network-accessible server requires additional hardening steps.
+
+Key points:
+
+- **Audit logs contain no typed health text by default.**  `LOG_USER_TEXT=false` (the
+  default) means the log records only message length, a short hash, tier, step names, and
+  timings.  Phone numbers are always redacted.  Raw health text is never written unless
+  `LOG_USER_TEXT=true` is explicitly set (development/walkthrough only).
+
+- **Before any deployment**, complete the checklist in
+  [`docs/SECURITY.md`](docs/SECURITY.md): add a reverse proxy with per-IP rate limiting,
+  terminate TLS, set `server.headless = true`, redirect stderr to an internal log sink,
+  run `pip-audit`, and enforce the 90-day log-retention schedule.
+
+See [`docs/SECURITY.md`](docs/SECURITY.md) for the full threat model, the list of
+controls in place, and each finding with its status.
+
+---
+
 ## Docs
 
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — step-by-step guide for end users
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — component design, scoring weights, data flows
 - [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) — safety rules, consent gate, banned phrases, testing
+- [`docs/SECURITY.md`](docs/SECURITY.md) — threat model, controls, and security findings
 - [`docs/TESTING.md`](docs/TESTING.md) — test suite reference
 - [`docs/DATA.md`](docs/DATA.md) — data dictionary for hospitals_clean.csv
 - [`docs/SPEC.md`](docs/SPEC.md) — original technical specification
