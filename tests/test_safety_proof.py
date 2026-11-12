@@ -28,6 +28,7 @@ from src.checks import _check_banned_phrases, final_check  # noqa: E402
 from src.orchestrator import (  # noqa: E402
     SessionResult,
     _DEMO_EMERGENCY_NUMBER,
+    clear_cache as _clear_messages_cache,
     create_handoff_summary,
     run_session,
 )
@@ -282,9 +283,13 @@ class TestOfflineEmergency:
     def test_emergency_number_configurable_in_offline_mode(self, monkeypatch) -> None:
         """The configured emergency number appears even without network."""
         monkeypatch.setenv("EMERGENCY_NUMBER", "112")
-        result = _run("I have crushing chest pain.")
-        assert "112" in result.answer_text
-        monkeypatch.delenv("EMERGENCY_NUMBER", raising=False)
+        _clear_messages_cache()   # invalidate so the new env value is picked up
+        try:
+            result = _run("I have crushing chest pain.")
+            assert "112" in result.answer_text
+        finally:
+            monkeypatch.delenv("EMERGENCY_NUMBER", raising=False)
+            _clear_messages_cache()   # restore defaults for subsequent tests
 
     # -- Safety check itself is offline (check_red_flags) --------------------
 

@@ -25,6 +25,7 @@ from src.orchestrator import (  # noqa: E402
     _DEMO_EMERGENCY_REGION,
     _emergency_number,
     _emergency_region,
+    clear_cache as _clear_messages_cache,
     create_handoff_summary,
     run_session,
 )
@@ -115,9 +116,11 @@ class TestEmergencyPath:
     def test_emergency_answer_contains_emergency_number(self) -> None:
         # Set a recognisable test value; verify it appears in the answer.
         os.environ["EMERGENCY_NUMBER"] = "555-DEMO"
+        _clear_messages_cache()   # invalidate the pre-loaded cache so new env is picked up
         result = _run("I ate a peanut and my throat is swelling.")
         assert "555-DEMO" in result.answer_text
         os.environ.pop("EMERGENCY_NUMBER", None)   # restore so other tests see the default
+        _clear_messages_cache()   # restore cache to default values for subsequent tests
 
     def test_emergency_no_diagnosis_in_answer(self) -> None:
         result = _run("My dad is clutching his chest and crushing him pain.")
@@ -337,13 +340,17 @@ class TestEmergencyConfig:
 
     def test_urgent_answer_shows_emergency_region(self, monkeypatch) -> None:
         monkeypatch.setenv("EMERGENCY_REGION", "TestLand")
-        result = _run(
-            "I've been having thoughts of hurting myself lately.",
-            area="Northgate",
-        )
-        # Region appears in the urgent body message only on non-review paths.
-        if result.tier == "urgent" and not result.needs_human_review:
-            assert "TestLand" in result.answer_text
+        _clear_messages_cache()   # invalidate so the new env value is picked up
+        try:
+            result = _run(
+                "I've been having thoughts of hurting myself lately.",
+                area="Northgate",
+            )
+            # Region appears in the urgent body message only on non-review paths.
+            if result.tier == "urgent" and not result.needs_human_review:
+                assert "TestLand" in result.answer_text
+        finally:
+            _clear_messages_cache()   # restore defaults for subsequent tests
 
     def test_no_hardcoded_bare_999_in_answer_when_env_unset(self) -> None:
         """When EMERGENCY_NUMBER is not set, a bare '999' (not wrapped in the demo label)
@@ -472,12 +479,16 @@ class TestNeedsHumanReviewBranching:
         """The emergency number in the urgent review path respects EMERGENCY_NUMBER env var."""
         monkeypatch.setattr("src.orchestrator.final_check", self._always_fail())
         monkeypatch.setenv("EMERGENCY_NUMBER", "112")
-        result = _run(
-            "My partner has a very high temperature and is confused.",
-            area="Eastfield",
-        )
-        if result.tier in ("urgent", "emergency") and result.needs_human_review:
-            assert "112" in result.answer_text
+        _clear_messages_cache()   # invalidate so the new env value is picked up
+        try:
+            result = _run(
+                "My partner has a very high temperature and is confused.",
+                area="Eastfield",
+            )
+            if result.tier in ("urgent", "emergency") and result.needs_human_review:
+                assert "112" in result.answer_text
+        finally:
+            _clear_messages_cache()   # restore defaults for subsequent tests
 
     def test_no_hits_urgent_review_shows_fallback_reason(self, monkeypatch) -> None:
         """When hits list is empty on an urgent review, fallback reason text is shown."""

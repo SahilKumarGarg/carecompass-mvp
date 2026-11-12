@@ -49,6 +49,30 @@ from src.safety import SafetyResult, check_red_flags
 _MESSAGES_PATH = Path(__file__).parent.parent / "data" / "messages.json"
 _MAX_CHECK_RETRIES = 2
 
+# ---------------------------------------------------------------------------
+# Messages cache — loaded once at module import, reset only by tests
+# ---------------------------------------------------------------------------
+
+# Pre-populated at the bottom of this module after _load_messages() is defined.
+_MESSAGES_CACHE: dict | None = None
+
+
+def _get_messages() -> dict:
+    """Return the cached messages dict, loading from disk on first call."""
+    global _MESSAGES_CACHE
+    if _MESSAGES_CACHE is None:
+        _MESSAGES_CACHE = _load_messages()
+    return _MESSAGES_CACHE
+
+
+def clear_cache() -> None:
+    """Reset the in-process messages cache.  Call this only from tests that
+    modify environment variables (EMERGENCY_NUMBER / EMERGENCY_REGION) and
+    need the next pipeline call to re-read them.
+    Production code must never call this."""
+    global _MESSAGES_CACHE
+    _MESSAGES_CACHE = None
+
 
 # ---------------------------------------------------------------------------
 # Output schema
@@ -228,7 +252,7 @@ def _build_display_intro_hospitals(
     Never includes individual hospital facts — those live in the cards.
     """
     if tier == "urgent":
-        messages = _load_messages()
+        messages = _get_messages()
         urgent_msg = messages["urgent"]
         return urgent_msg["heading"] + " " + _fill_placeholders(urgent_msg["body"])
 
@@ -262,7 +286,7 @@ def _build_answer_text_hospitals(
     - The reason text (which includes address, distance, type, val_year, call-ahead).
     - Never claims emergency department, 24-hour service or opening hours.
     """
-    messages = _load_messages()
+    messages = _get_messages()
     lines: list[str] = []
 
     # Widening notice — always shown when the location was broadened.
@@ -324,7 +348,7 @@ def _build_answer_text_hospitals(
 def _build_answer_text(ranked: list[RankedResult], tier: str) -> str:
     """Build the recommendation answer text from ranked results (demo path)."""
     if not ranked:
-        messages = _load_messages()
+        messages = _get_messages()
         body = messages["needs_human_review"]["body"]
         return _fill_placeholders(body)
 
@@ -333,7 +357,7 @@ def _build_answer_text(ranked: list[RankedResult], tier: str) -> str:
 
     lines: list[str] = []
     if tier == "urgent":
-        messages = _load_messages()
+        messages = _get_messages()
         urgent_msg = messages["urgent"]
         lines.append(urgent_msg["heading"])
         lines.append(_fill_placeholders(urgent_msg["body"]))
@@ -482,7 +506,7 @@ def run_session(
     })
 
     if safety_result.tier == "emergency":
-        messages = _load_messages()
+        messages = _get_messages()
         em = messages["emergency"]
         # body already has placeholders replaced by _load_messages()
         answer = f"🚨 **{em['heading']}**\n\n{em['body']}"
@@ -553,7 +577,7 @@ def run_session(
             # The area string is a bare city or county name without a state.
             # Return a clear message asking the user to choose a state rather
             # than silently querying hospitals across every state.
-            messages = _load_messages()
+            messages = _get_messages()
             no_state_msg = messages.get(
                 "no_state_in_area",
                 "Please choose a state from the dropdown so we can find hospitals "
@@ -644,7 +668,7 @@ def run_session(
                 needs_review = True
 
         if needs_review:
-            messages = _load_messages()
+            messages = _get_messages()
             if safety_result.tier in ("urgent", "emergency"):
                 review_msg = messages["needs_human_review_urgent"]
                 tier_label = safety_result.tier.upper()
@@ -730,7 +754,7 @@ def run_session(
             needs_review = True
 
     if needs_review:
-        messages = _load_messages()
+        messages = _get_messages()
         if safety_result.tier in ("urgent", "emergency"):
             review_msg = messages["needs_human_review_urgent"]
             tier_label = safety_result.tier.upper()
@@ -793,3 +817,6 @@ def create_handoff_summary(session_result: SessionResult) -> str:
         "summary_preview": summary[:120],
     })
     return summary
+
+# Pre-load messages at module import time (never inside a hot path).
+_get_messages()

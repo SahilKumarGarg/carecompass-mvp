@@ -17,6 +17,11 @@ Spelling tolerance (term_groups only):
   false positives (e.g. "fevar" + "confusd" each fuzzy-matching separately to
   the same rule still fires, but only because one of the two matches is exact
   after the contraction pre-step and JSON synonym additions).
+
+Performance note:
+  The worst-case matching cost scales with the number of tokens in the input.
+  src/sanitize.py enforces MAX_INPUT_CHARS = 1_000 before this function is
+  called, which bounds the token count and keeps latency predictable.
 """
 
 from __future__ import annotations
@@ -265,14 +270,30 @@ def _match_term_groups(rule: dict, text_norm: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Data loader
+# Rule cache — loaded once at module import, reset only by tests
 # ---------------------------------------------------------------------------
 
-def _load_rules() -> list[dict]:
-    """Load red-flag categories from data/red_flags.json."""
-    with _RED_FLAGS_PATH.open(encoding="utf-8") as fh:
-        data = json.load(fh)
-    return data["red_flag_categories"]
+# Pre-populate at module import time so the first call to check_red_flags() pays
+# no I/O cost.  Tests that need a fresh load should call clear_cache() first.
+_RULES_CACHE: list[dict] | None = None
+
+
+def _get_rules() -> list[dict]:
+    """Return the cached red-flag rule list, loading from disk on first call."""
+    global _RULES_CACHE
+    if _RULES_CACHE is None:
+        with _RED_FLAGS_PATH.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        _RULES_CACHE = data["red_flag_categories"]
+    return _RULES_CACHE
+
+
+def clear_cache() -> None:
+    """Reset the in-process rule cache.  Call this only from tests that modify
+    the underlying JSON and need the next check_red_flags() call to re-read it.
+    Production code must never call this."""
+    global _RULES_CACHE
+    _RULES_CACHE = None
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +316,7 @@ def check_red_flags(text: str) -> SafetyResult:
         SafetyResult(tier, hits) where tier is the highest tier across all hits.
     """
     text_norm = _normalise(text)
-    rules = _load_rules()
+    rules = _get_rules()
 
     hits: list[RuleHit] = []
     for rule in rules:
@@ -319,3 +340,6 @@ def check_red_flags(text: str) -> SafetyResult:
     hits.sort(key=lambda h: _TIER_ORDER[h.tier], reverse=True)
     top_tier = hits[0].tier
     return SafetyResult(tier=top_tier, hits=hits)
+
+# Pre-load rules at module import time (never inside a hot path).
+_get_rules()

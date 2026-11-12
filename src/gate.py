@@ -47,6 +47,19 @@ def _load_health_terms() -> set[str]:
 _HEALTH_TERMS: frozenset[str] = frozenset(_load_health_terms())
 
 # ---------------------------------------------------------------------------
+# Pre-compiled per-term regex patterns — built once at module import time.
+# Single-word terms require a whole-word boundary match; building these inside
+# _contains_health_term() on every call would recompile them each invocation.
+# ---------------------------------------------------------------------------
+
+_MULTI_WORD_TERMS: tuple[str, ...] = tuple(
+    t for t in _HEALTH_TERMS if " " in t
+)
+_SINGLE_WORD_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(r"\b" + re.escape(t) + r"\b") for t in _HEALTH_TERMS if " " not in t
+)
+
+# ---------------------------------------------------------------------------
 # Fixed pattern lists — loaded at module import time
 # ---------------------------------------------------------------------------
 
@@ -165,6 +178,15 @@ def _norm(text: str) -> str:
 # Health-vocabulary check
 # ---------------------------------------------------------------------------
 
+# Additional health patterns pre-compiled at module import time.
+_FEEL_PATTERN = re.compile(
+    r"\bfeel(ing)?\s+(unwell|sick|dizzy|weak|off|bad|terrible|awful|faint|funny|strange|ill|poorly|nauseous)\b"
+)
+_BODYPART_SYMPTOM_PATTERN = re.compile(
+    r"\b(my|his|her|their|the)\s+\w+\s+(hurt|hurts|ache|aches|is\s+sore|is\s+swollen|is\s+swelling|is\s+tender|is\s+painful|is\s+bleeding|is\s+infected)\b"
+)
+
+
 def _contains_health_term(text_norm: str) -> bool:
     """Return True if text contains any health vocabulary term.
 
@@ -178,31 +200,22 @@ def _contains_health_term(text_norm: str) -> bool:
     Returns:
         True if a health term is found; False otherwise.
     """
-    # Check multi-word terms (exact substring match is fine here)
-    multi_word = [t for t in _HEALTH_TERMS if " " in t]
-    for term in multi_word:
+    # Check multi-word terms using pre-compiled tuple (exact substring match).
+    for term in _MULTI_WORD_TERMS:
         if term in text_norm:
             return True
 
-    # Check single-word terms with whole-word boundary
-    single_word = [t for t in _HEALTH_TERMS if " " not in t]
-    for term in single_word:
-        pattern = r"\b" + re.escape(term) + r"\b"
-        if re.search(pattern, text_norm):
+    # Check single-word terms using pre-compiled whole-word patterns.
+    for pat in _SINGLE_WORD_PATTERNS:
+        if pat.search(text_norm):
             return True
 
     # Additional pattern: "feel/feeling + unwell/sick/dizzy/weak/off/bad/terrible/awful/faint"
-    feel_pattern = re.compile(
-        r"\bfeel(ing)?\s+(unwell|sick|dizzy|weak|off|bad|terrible|awful|faint|funny|strange|ill|poorly|nauseous)\b"
-    )
-    if feel_pattern.search(text_norm):
+    if _FEEL_PATTERN.search(text_norm):
         return True
 
     # "my/his/her/their + body_part + hurts/aches/is sore/is swollen/..."
-    bodypart_symptom = re.compile(
-        r"\b(my|his|her|their|the)\s+\w+\s+(hurt|hurts|ache|aches|is\s+sore|is\s+swollen|is\s+swelling|is\s+tender|is\s+painful|is\s+bleeding|is\s+infected)\b"
-    )
-    if bodypart_symptom.search(text_norm):
+    if _BODYPART_SYMPTOM_PATTERN.search(text_norm):
         return True
 
     return False
