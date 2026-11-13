@@ -6,7 +6,14 @@ Metrics reported:
   - Under-triage count   (emergency/urgent expected but lower tier returned — hard fail)
   - Over-triage count    (routine expected but higher tier returned — allowed, printed)
   - Tier agreement       (% of all scenarios where actual_tier == expected_tier)
-  - Service-type agreement
+  - Hospital-type agreement (hospitals_us path)
+      • For non-emergency scenarios: top hospital's raw TYPE must be in
+        acceptable_hospital_types from scenarios.json.
+      • For routine scenarios where expected_service_type is pharmacy/
+        primary_care/telemedicine: instead check that the approved advisory
+        line "A primary care clinic or pharmacy may be a better first step"
+        appears in answer_text.
+      • Emergency scenarios are skipped (no hospital search is performed).
   - Grounding failures
 
 Under-triage: actual tier is strictly LOWER than expected tier.
@@ -63,49 +70,46 @@ class ScenarioOutcome:
     label: str
     expected_tier: str
     actual_tier: str
-    expected_service_type: Optional[str]
-    actual_service_type: Optional[str]
+    # For hospitals_us path: raw TYPE string of the top-ranked hospital
+    # (e.g. "GENERAL ACUTE CARE"). None when no hospital was returned.
+    actual_hospital_type: Optional[str]
+    # Acceptable hospital TYPE values for this scenario (from scenarios.json).
+    acceptable_hospital_types: list[str]
     tier_match: bool
     under_triage: bool   # actual tier is strictly lower than expected
     over_triage: bool    # actual tier is strictly higher than expected (allowed)
+    # True/False = assessed; None = skipped (emergency tier, over-triage-to-emergency,
+    # or no ranked results available).
     service_type_match: Optional[bool]
+    # True when the routine-advisory check was used instead of type matching.
+    routine_advisory_checked: bool
     grounding_failure: bool
     result: SessionResult
 
 
 # ---------------------------------------------------------------------------
-# Helper: derive top service type from SessionResult
+# Helper: raw hospital TYPE from top-ranked result
 # ---------------------------------------------------------------------------
 
-def _top_service_type(result: SessionResult) -> Optional[str]:
-    """Return the type of the top (rank-1) non-fallback service/hospital, or None.
+# Routine scenarios whose expected_service_type is one of these use the
+# advisory-line check instead of hospital-type matching.
+_CLINIC_OR_PHARMACY_TYPES = {"pharmacy", "primary_care", "telemedicine"}
 
-    Supports both RankedResult (.service) and RankedHospital (.hospital).
-    For hospitals_us path, hospital type is the raw CSV TYPE string; we map
-    the CSV type to the demo service-type vocabulary for scenario comparison
-    so that existing acceptable_service_types lists are still usable.
-    """
+# The verbatim substring that must appear in answer_text for routine advisory check.
+_ROUTINE_ADVISORY_SUBSTRING = "A primary care clinic or pharmacy may be a better first step"
+
+
+def _top_hospital_type(result: SessionResult) -> Optional[str]:
+    """Return the raw TYPE (uppercased) of the top non-fallback hospital, or None."""
     top = [r for r in result.ranked if not r.is_fallback]
     if not top:
         return None
     r0 = top[0]
-    # hospitals_us path → RankedHospital
     hosp = getattr(r0, "hospital", None)
     if hosp is not None:
-        # Map CSV hospital TYPE to demo service-type vocabulary.
-        htype = hosp.type.upper()
-        if htype in ("GENERAL ACUTE CARE", "CRITICAL ACCESS"):
-            return "hospital_emergency"
-        if htype == "PSYCHIATRIC":
-            return "specialist"
-        if htype == "CHILDREN":
-            return "hospital_emergency"
-        if htype == "WOMEN":
-            return "hospital_emergency"
-        return "hospital_emergency"  # default for any other acute type
-    # demo path → RankedResult
-    svc = getattr(r0, "service", None)
-    return svc.type if svc is not None else None
+        return hosp.type.strip().upper()
+    # demo path — no hospital type available
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -124,42 +128,67 @@ def _run_all_scenarios() -> list[ScenarioOutcome]:
             "actual_tier": result.tier,
             "check_passed": result.check_passed,
         })
-        actual_type = _top_service_type(result)
-        expected_type: Optional[str] = scn["expected_service_type"]
-        # W8-2: accept any type in the acceptable_service_types list.
-        acceptable_types: list[str] = scn.get("acceptable_service_types") or (
-            [expected_type] if expected_type else []
-        )
+
+        actual_hosp_type = _top_hospital_type(result)
+        acceptable_htypes: list[str] = scn.get("acceptable_hospital_types") or []
+        expected_svc_type: Optional[str] = scn.get("expected_service_type")
 
         exp_rank = _TIER_RANK[scn["expected_tier"]]
         act_rank = _TIER_RANK[result.tier]
 
-        tier_match = result.tier == scn["expected_tier"]
+        tier_match   = result.tier == scn["expected_tier"]
         under_triage = act_rank < exp_rank
         over_triage  = act_rank > exp_rank
 
-        # W8-3: skip type assessment when the scenario was over-triaged to emergency
-        # (those follow the emergency path and produce no ranked results by design).
-        if expected_type is not None and actual_type is not None and not (
-            over_triage and result.tier == "emergency"
+        routine_advisory_checked = False
+
+        # Determine service-type match:
+        # 1. Skip for emergency-tier scenarios (no hospital search is performed).
+        # 2. Skip when over-triaged all the way to emergency (same reason).
+        # 3. For routine scenarios whose expected type is clinic/pharmacy/telemedicine:
+        #    check that the advisory line appears in answer_text.
+        # 4. Otherwise compare actual hospital TYPE against acceptable_hospital_types.
+        skip_type = (
+            scn["expected_tier"] == "emergency"
+            or (over_triage and result.tier == "emergency")
+        )
+
+        if skip_type:
+            type_match: Optional[bool] = None
+
+        elif (
+            result.tier == "routine"
+            and expected_svc_type in _CLINIC_OR_PHARMACY_TYPES
         ):
-            type_match: Optional[bool] = actual_type in acceptable_types
-        elif expected_type is None or (over_triage and result.tier == "emergency"):
-            type_match = None
+            # Routine path: hospitals are shown with the advisory line.
+            # Count as correct when the advisory line appears in the answer.
+            routine_advisory_checked = True
+            type_match = _ROUTINE_ADVISORY_SUBSTRING in result.answer_text
+
+        elif actual_hosp_type is not None and acceptable_htypes:
+            type_match = actual_hosp_type in acceptable_htypes
+
+        elif actual_hosp_type is None:
+            # No ranked hospital available — treat as not assessable if needs_human_review,
+            # otherwise flag as a type failure.
+            type_match = None if result.needs_human_review else False
+
         else:
-            type_match = False
+            # No acceptable types defined in scenario — skip.
+            type_match = None
 
         outcomes.append(ScenarioOutcome(
             scenario_id=scn["id"],
             label=scn["label"],
             expected_tier=scn["expected_tier"],
             actual_tier=result.tier,
-            expected_service_type=expected_type,
-            actual_service_type=actual_type,
+            actual_hospital_type=actual_hosp_type,
+            acceptable_hospital_types=acceptable_htypes,
             tier_match=tier_match,
             under_triage=under_triage,
             over_triage=over_triage,
             service_type_match=type_match,
+            routine_advisory_checked=routine_advisory_checked,
             grounding_failure=result.needs_human_review,
             result=result,
         ))
@@ -194,10 +223,10 @@ def _print_summary(outcomes: list[ScenarioOutcome]) -> dict:
     grounding_failures = [o for o in outcomes if o.grounding_failure]
 
     # ── Print table ──────────────────────────────────────────────────────
-    col = "{:<10} {:<32} {:<10} {:<10} {:<14} {:<14} {}"
+    col = "{:<10} {:<32} {:<10} {:<10} {:<22} {}"
     header = col.format(
         "ID", "Label", "Exp tier", "Act tier",
-        "Exp svc type", "Act svc type", "Notes"
+        "Act hosp TYPE", "Notes"
     )
     sep = "-" * len(header)
 
@@ -218,21 +247,27 @@ def _print_summary(outcomes: list[ScenarioOutcome]) -> dict:
             tier_flag = "FAIL TIER"
 
         if o.service_type_match is False:
-            type_flag = "FAIL TYPE"
+            if o.routine_advisory_checked:
+                type_flag = "FAIL ADVISORY"
+            else:
+                type_flag = "FAIL TYPE"
         elif o.service_type_match is None:
             type_flag = "-"
         else:
-            type_flag = "OK"
+            if o.routine_advisory_checked:
+                type_flag = "OK(advisory)"
+            else:
+                type_flag = "OK"
 
         gnd_flag = " GROUNDING" if o.grounding_failure else ""
         notes = f"{tier_flag} | {type_flag}{gnd_flag}"
+        hosp_type_str = str(o.actual_hospital_type or "-")
         print(col.format(
             o.scenario_id,
             o.label[:31],
             o.expected_tier[:9],
             o.actual_tier[:9],
-            str(o.expected_service_type or "-")[:13],
-            str(o.actual_service_type or "-")[:13],
+            hosp_type_str[:21],
             notes,
         ))
 
@@ -247,7 +282,7 @@ def _print_summary(outcomes: list[ScenarioOutcome]) -> dict:
           f"[routine raised to higher tier]")
     print(f"Tier agreement:         {tier_correct}/{len(outcomes)} "
           f"({tier_agreement * 100:.0f}%)")
-    print(f"Service-type agreement: {type_correct}/{len(all_with_type)} "
+    print(f"Hospital-type agreement:{type_correct}/{len(all_with_type)} "
           f"({type_agreement * 100:.0f}%)  [assessed: {len(all_with_type)} scenarios]")
     print(f"Grounding failures:     {len(grounding_failures)}/{len(outcomes)}")
     if under_triage_list:
